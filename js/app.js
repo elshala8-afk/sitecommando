@@ -68,7 +68,7 @@ const MOCK_ANSWERS = {
 const state = {
   selectedCharacter: null,
   participantName: '',
-  quizAnswers: { mood:null, note:null, song:'', share:[], shareDetails:{}, need:[], needOther:'', anecdote:'', anecdotePhoto:null },
+  quizAnswers: { mood:null, note:null, song:'', share:[], shareDetails:{}, need:[], needOther:'', anecdote:'' },
   binome: null,
   playedGames: { blindtest:false, memory:false, quiz:false, imitation:false }
 };
@@ -89,7 +89,7 @@ function assetForCharacterId(id){
   return c ? c.asset : 'char_258';
 }
 function watchParticipants(){
-  if(typeof firebaseReady === 'undefined' || !firebaseReady) return;
+  if(typeof firebaseReady === 'undefined' || !firebaseReady || !db) return;
   db.collection('participants')
     .where('month','==', currentMonthTag())
     .onSnapshot(snapshot=>{
@@ -106,7 +106,7 @@ function watchParticipants(){
     }, err=>{ console.warn('Lecture Firestore (participants) impossible :', err); });
 }
 function watchMessages(){
-  if(typeof firebaseReady === 'undefined' || !firebaseReady) return;
+  if(typeof firebaseReady === 'undefined' || !firebaseReady || !db) return;
   db.collection('messages')
     .where('month','==', currentMonthTag())
     .onSnapshot(snapshot=>{
@@ -114,7 +114,7 @@ function watchMessages(){
     }, err=>{ console.warn('Lecture Firestore (messages) impossible :', err); });
 }
 function watchMonthlyConfig(){
-  if(typeof firebaseReady === 'undefined' || !firebaseReady) return;
+  if(typeof firebaseReady === 'undefined' || !firebaseReady || !db) return;
   db.collection('config').doc('monthly').onSnapshot(doc=>{
     if(!doc.exists) return;
     const d = doc.data();
@@ -132,7 +132,7 @@ function watchMonthlyConfig(){
   }, err=>{ console.warn('Lecture Firestore (config) impossible :', err); });
 }
 function saveMonthlyConfigToCloud(){
-  if(typeof firebaseReady === 'undefined' || !firebaseReady) return;
+  if(typeof firebaseReady === 'undefined' || !firebaseReady || !db) return;
   db.collection('config').doc('monthly').set({
     crea: monthlyConfig.crea,
     lettreBody: monthlyConfig.lettreBody,
@@ -142,7 +142,7 @@ function saveMonthlyConfigToCloud(){
   }, {merge:true}).catch(err=> console.warn("Impossible d'enregistrer la config dans Firebase :", err));
 }
 function saveParticipantToCloud(){
-  if(typeof firebaseReady === 'undefined' || !firebaseReady || !state.selectedCharacter) return;
+  if(typeof firebaseReady === 'undefined' || !firebaseReady || !db || !state.selectedCharacter) return;
   db.collection('participants').add({
     name: state.participantName,
     characterId: state.selectedCharacter.id,
@@ -161,19 +161,26 @@ function saveParticipantToCloud(){
 function getAnswersFor(c, isYou){
   if(isYou){ return {name: state.participantName, ...state.quizAnswers}; }
   if(sharedParticipants[c.id]) return sharedParticipants[c.id];
-  return MOCK_ANSWERS[c.id];
+  // En mode démo (pas de Firebase), on garde les exemples fictifs pour que
+  // ce soit agréable à tester. Une fois Firebase branché, on affiche
+  // seulement les vraies personnes qui ont rejoint ce mois-ci.
+  if(typeof firebaseReady === 'undefined' || !firebaseReady) return MOCK_ANSWERS[c.id];
+  return null;
 }
 function getAllAnswersMap(){
   const map = {};
   CHARACTERS.forEach(c=>{
     const isYou = state.selectedCharacter && c.id === state.selectedCharacter.id;
-    map[c.id] = getAnswersFor(c, isYou);
+    const a = getAnswersFor(c, isYou);
+    if(a) map[c.id] = a;
   });
   return map;
 }
 function refreshLiveViews(){
   if(document.getElementById('modal-recs')?.classList.contains('active')) buildRecsFeed();
   if(document.getElementById('modal-playlist')?.classList.contains('active')) renderPlaylist();
+  if(document.getElementById('screen-dashboard')?.classList.contains('active')) buildDashCharacterGrid();
+  updateCharacterAvailability();
 }
 function connectionBadgeText(){
   return (typeof firebaseReady !== 'undefined' && firebaseReady)
@@ -271,6 +278,17 @@ CHARACTERS.forEach(c=>{
   btn.addEventListener('click', ()=> chooseCharacter(c));
   characterGrid.appendChild(btn);
 });
+function updateCharacterAvailability(){
+  if(typeof firebaseReady === 'undefined' || !firebaseReady || !db) return; // en mode démo, tous les personnages restent proposés
+  document.querySelectorAll('#character-grid .character').forEach(btn=>{
+    const id = btn.dataset.id;
+    const c = CHARACTERS.find(ch=>ch.id===id);
+    const taken = !!sharedParticipants[id];
+    btn.classList.toggle('taken', taken);
+    btn.disabled = taken;
+    btn.querySelector('.name').textContent = taken ? `${c.name} · pris` : c.name;
+  });
+}
 function chooseCharacter(c){
   state.selectedCharacter = c;
   document.querySelectorAll('#character-grid .character').forEach(el=>{
@@ -382,19 +400,6 @@ try { watchParticipants(); } catch(e){ console.warn('watchParticipants() a écho
 try { watchMessages(); } catch(e){ console.warn('watchMessages() a échoué — vérifie js/firebase-config.js', e); }
 try { watchMonthlyConfig(); } catch(e){ console.warn('watchMonthlyConfig() a échoué — vérifie js/firebase-config.js', e); }
 
-document.getElementById('anecdote-input').addEventListener('change', ()=>{
-  const input = document.getElementById('anecdote-input');
-  const file = input.files && input.files[0];
-  if(!file) return;
-  const reader = new FileReader();
-  reader.onload = (e)=>{
-    state.quizAnswers.anecdotePhoto = e.target.result;
-    document.getElementById('anecdote-preview').src = e.target.result;
-    document.getElementById('anecdote-zone').classList.add('has-photo');
-  };
-  reader.readAsDataURL(file);
-});
-
 document.getElementById('quiz-submit').addEventListener('click', ()=>{
   if(!state.quizAnswers.mood || !state.quizAnswers.note){
     alert('Choisis au moins ta météo et ta note avant de continuer 🙂');
@@ -428,6 +433,8 @@ function buildDashCharacterGrid(){
   wrap.innerHTML = '';
   CHARACTERS.forEach(c=>{
     const isYou = state.selectedCharacter && c.id === state.selectedCharacter.id;
+    const answers = getAnswersFor(c, isYou);
+    if(!isYou && !answers) return; // personne n'a encore rejoint avec ce personnage ce mois-ci
     const btn = document.createElement('button');
     btn.className = 'character';
     btn.innerHTML = `<img src="${ASSETS[c.asset]}" alt="${c.name}"><span class="name">${c.name}</span>${isYou ? '<span class="you-badge">C\'est toi</span>' : ''}`;
@@ -464,20 +471,12 @@ function openFicheDetail(c, isYou){
   renderChips(document.getElementById('fiche-need-val'), answers.need, NEEDS, null, answers.needOther);
 
   const anecdoteRow = document.getElementById('fiche-anecdote-row');
-  const anecdotePhoto = document.getElementById('fiche-anecdote-photo');
   const anecdoteText = answers.anecdote || (isYou ? answers.anecdote : '');
-  const photoUrl = isYou ? state.quizAnswers.anecdotePhoto : null;
-  if(!anecdoteText && !photoUrl){
+  if(!anecdoteText){
     anecdoteRow.style.display = 'none';
   } else {
     anecdoteRow.style.display = '';
-    document.getElementById('fiche-anecdote-val').textContent = anecdoteText || '—';
-    if(photoUrl){
-      anecdotePhoto.src = photoUrl;
-      anecdotePhoto.style.display = 'block';
-    } else {
-      anecdotePhoto.style.display = 'none';
-    }
+    document.getElementById('fiche-anecdote-val').textContent = anecdoteText;
   }
 
   openModal('modal-fiche-detail');
@@ -1189,7 +1188,7 @@ document.getElementById('love-send').addEventListener('click', ()=>{
   const asset = state.selectedCharacter ? state.selectedCharacter.asset : 'char_258';
   LOVE_MESSAGES.push({ name, asset, text, audioUrl: recordedBlobUrl });
   messages.push({ name, text, audioUrl: recordedBlobUrl });
-  if(typeof firebaseReady !== 'undefined' && firebaseReady && text){
+  if(typeof firebaseReady !== 'undefined' && firebaseReady && db && text){
     db.collection('messages').add({
       name, text,
       characterId: state.selectedCharacter ? state.selectedCharacter.id : null,
