@@ -1001,6 +1001,7 @@ const LETTRES_DU_MOIS = [
   { body:"Il y a des étés qu'on n'oublie pas, pas à cause d'un lieu ou d'une date, mais à cause des gens avec qui on les a traversés. Cette Commando existe pour ça : se donner une excuse, chaque mois, de se rappeler qu'on compte les uns pour les autres. Rien de grandiose — juste un mot, un jeu, une photo, un petit signe de vie.",
     quote:"On ne se souvient pas des étés, on se souvient de qui les a rendus doux." }
 ];
+const MOIS_FR = ['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
 document.getElementById('open-lettre').addEventListener('click', ()=>{
   let body, quote;
   if(monthlyConfig.lettreBody){
@@ -1010,6 +1011,7 @@ document.getElementById('open-lettre').addEventListener('click', ()=>{
     const pick = LETTRES_DU_MOIS[new Date().getMonth() % LETTRES_DU_MOIS.length];
     body = pick.body; quote = pick.quote;
   }
+  document.getElementById('lettre-title').textContent = `Lettre de ${MOIS_FR[new Date().getMonth()]}`;
   document.getElementById('lettre-body').textContent = body;
   document.getElementById('lettre-quote').textContent = quote ? '« ' + quote + ' »' : '';
   openModal('modal-lettre');
