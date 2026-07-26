@@ -68,6 +68,9 @@
   .character.chosen img{ transform:scale(1.14) translateY(-10px); filter:drop-shadow(0 0 0 3px var(--terracotta)) drop-shadow(0 20px 26px rgba(0,0,0,.4)); }
   .character.chosen .name{ opacity:1; transform:translateY(0); color:var(--terracotta); font-weight:600; font-style:normal;}
   .character.fade-out{ opacity:0; transform:scale(.9); pointer-events:none; }
+  .character.taken{ opacity:.35; filter:grayscale(1); cursor:not-allowed; }
+  .character.taken:hover img{ transform:none; filter:none; }
+  .character.taken .name{ opacity:1; color:rgba(255,252,243,.6); font-style:normal; }
   .character.small img{ width:80px; }
 
   .modal-overlay{ position:fixed; inset:0; z-index:50; display:flex; align-items:center; justify-content:center; padding:24px; overflow-y:auto; opacity:0; pointer-events:none; visibility:hidden; transition:opacity .5s var(--ease); }
@@ -319,15 +322,57 @@
   .receive-card audio{ width:100%; margin-top:8px; }
 
   @media (max-width:640px){
-    .scene-content{ padding:5vh 5vw; }
-    .login-card{ padding:36px 26px 30px; border-radius:22px; }
-    .letter-card{ padding:38px 26px 32px; }
-    .content-card{ padding:36px 24px 30px; }
-    .quiz-page-wrap{ padding:32px 22px 26px; }
-    .character img{ width:108px; }
-    .rubrique-grid{ grid-template-columns:repeat(2,1fr); gap:10px; }
-    .rubrique-card{ padding:18px 16px 16px; min-height:150px; }
-    .rubrique-card h3{ font-size:16px; }
+    .scene-content{ padding:4vh 5vw; }
+    .login-card{ padding:32px 22px 26px; border-radius:20px; }
+    .letter-card{ padding:32px 22px 28px; }
+    .content-card{ padding:30px 20px 26px; }
+    .quiz-page-wrap{ padding:28px 18px 22px; }
+    .character img{ width:104px; }
+
+    /* Titre "La Commando" plus discret sur mobile */
+    .commando-hero{ margin:22px 0 18px; }
+    .commando-title{ font-size:28px; margin-bottom:6px; }
+    .commando-sub{ font-size:13px; }
+    .dash-header{ gap:10px; margin-bottom:18px; }
+    .dash-header img{ width:46px; }
+    .dash-header h2{ font-size:19px; }
+
+    /* Personnages du dashboard : défilement horizontal, plus compact */
+    #dash-character-grid.card-style{
+      display:flex; flex-wrap:nowrap; overflow-x:auto; justify-content:flex-start;
+      gap:10px; padding:2px 2px 10px; margin:0 -5vw; padding-left:5vw; padding-right:5vw;
+      -webkit-overflow-scrolling:touch; scroll-snap-type:x proximity;
+    }
+    #dash-character-grid.card-style .character{
+      flex:0 0 auto; scroll-snap-align:start;
+      width:96px; height:126px; padding:12px 8px 10px; border-radius:16px;
+      box-shadow:0 6px 14px rgba(0,0,0,.14);
+    }
+    #dash-character-grid.card-style .character img{ width:58px; height:58px; }
+    #dash-character-grid.card-style .character .name{ font-size:11.5px; }
+    #dash-character-grid.card-style .character .you-badge{ font-size:8.5px; }
+
+    /* Rubriques : liste compacte en une colonne, moins de décor */
+    .dash-extras-title{ font-size:14px; margin:22px 0 10px; }
+    .rubrique-grid{ grid-template-columns:1fr; gap:8px; }
+    .rubrique-card{
+      flex-direction:row; flex-wrap:wrap; align-items:center;
+      gap:4px 14px; padding:13px 15px; min-height:auto;
+      border-radius:14px; box-shadow:0 4px 10px rgba(0,0,0,.12);
+    }
+    .rubrique-icon{ width:34px; height:34px; order:1; }
+    .rubrique-icon svg{ width:17px; height:17px; }
+    .rubrique-card .eyebrow{ display:none; }
+    .rubrique-card h3{ order:2; flex:1; font-size:14.5px; }
+    .rubrique-card .go{ display:none; }
+    .rubrique-card p{ order:3; flex:0 0 100%; font-size:11px; margin:0; padding-left:48px; line-height:1.35; }
+    .rubrique-card .status-badge{ position:static; order:4; font-size:9px; padding:3px 8px; }
+
+    /* Classement discret : encore plus compact */
+    .dash-lb-title{ font-size:11px; margin:16px 0 6px; }
+    .dash-lb-chip{ padding:4px 10px 4px 4px; }
+    .dash-lb-chip .nm{ font-size:11.5px; }
+
     .info-row{ flex-direction:column; gap:4px; }
     .info-row strong{ flex:none; }
     .option-grid{ grid-template-columns:repeat(auto-fit, minmax(78px,1fr)); gap:8px; }
@@ -335,16 +380,12 @@
     .option svg{ width:23px; height:23px; }
     .option span{ font-size:11px; }
     .love-name-row{ flex-wrap:wrap; }
-    .dash-header{ gap:12px; }
-    .dash-header img{ width:52px; }
     .memory-grid{ grid-template-columns:repeat(4,1fr); max-width:300px; }
-    #dash-character-grid.card-style .character{ width:120px; height:158px; padding:16px 10px 14px; }
-    #dash-character-grid.card-style .character img{ width:70px; height:70px; }
-    #dash-character-grid.card-style .character .name{ font-size:13px; }
   }
   @media (max-width:400px){
-    .login-card h1{ font-size:24px; }
-    .character img{ width:92px; }
+    .login-card h1{ font-size:22px; }
+    .character img{ width:88px; }
+    .commando-title{ font-size:25px; }
   }
   @media (prefers-reduced-motion: reduce){
     *{ animation-duration:0.001ms !important; animation-iteration-count:1 !important; transition-duration:0.001ms !important; }
