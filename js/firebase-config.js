@@ -19,7 +19,9 @@ const firebaseConfig = {
 };
 
 let db = null;
+let auth = null;
 let firebaseReady = false;
+let authReady = false;
 
 (function initFirebase(){
   if (firebaseConfig.apiKey === "REMPLACE_MOI") {
@@ -33,5 +35,13 @@ let firebaseReady = false;
     console.info("✅ Firebase connecté — les réponses sont partagées avec toute la Commando.");
   } catch (err) {
     console.warn("⚠️ Impossible de se connecter à Firebase, retour au mode démo local.", err);
+  }
+  try {
+    if (firebaseReady && firebase.auth) {
+      auth = firebase.auth();
+      authReady = true;
+    }
+  } catch (err) {
+    console.warn("⚠️ Firebase Authentication non disponible — connexion par mot de passe désactivée.", err);
   }
 })();
