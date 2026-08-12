@@ -144,7 +144,7 @@ function saveMonthlyConfigToCloud(){
 function saveParticipantToCloud(){
   if(typeof firebaseReady === 'undefined' || !firebaseReady || !db || !state.selectedCharacter) return;
   db.collection('participants').add({
-    ownerId: (typeof currentAuthUser !== 'undefined' && currentAuthUser) ? currentAuthUser.uid : null,
+    ownerId: getCurrentUid(),
     name: state.participantName,
     characterId: state.selectedCharacter.id,
     mood: state.quizAnswers.mood,
@@ -337,7 +337,6 @@ document.getElementById('letter-continue').addEventListener('click', async ()=>{
   if(typeof authReady !== 'undefined' && authReady){
     try{
       const cred = await auth.createUserWithEmailAndPassword(fakeEmailFor(name), password);
-      currentAuthUser = cred.user;
     }catch(err){
       console.warn(err);
       if(err.code === 'auth/email-already-in-use'){
@@ -359,9 +358,8 @@ document.getElementById('letter-continue').addEventListener('click', async ()=>{
 });
 
 /* ============ SE CONNECTER (retrouver son espace depuis un autre appareil) ============ */
-let currentAuthUser = null;
-if(typeof authReady !== 'undefined' && authReady){
-  auth.onAuthStateChanged(user => { currentAuthUser = user; });
+function getCurrentUid(){
+  return (typeof authReady !== 'undefined' && authReady && auth && auth.currentUser) ? auth.currentUser.uid : null;
 }
 function findOwnParticipant(uid){
   for(const [charId, data] of Object.entries(sharedParticipants)){
@@ -370,8 +368,9 @@ function findOwnParticipant(uid){
   return null;
 }
 function tryRestoreSession(){
-  if(typeof authReady === 'undefined' || !authReady || !currentAuthUser) return false;
-  const found = findOwnParticipant(currentAuthUser.uid);
+  const uid = getCurrentUid();
+  if(!uid) return false;
+  const found = findOwnParticipant(uid);
   if(!found) return false;
   const c = CHARACTERS.find(ch => ch.id === found.charId);
   if(!c) return false;
@@ -406,7 +405,6 @@ document.getElementById('signin-submit').addEventListener('click', async ()=>{
   }
   try{
     const cred = await auth.signInWithEmailAndPassword(fakeEmailFor(name), password);
-    currentAuthUser = cred.user;
     closeModal('modal-signin');
     let attempts = 0;
     const tryFind = () => {
@@ -554,7 +552,6 @@ document.getElementById('switch-identity').addEventListener('click', async ()=>{
   if(typeof authReady !== 'undefined' && authReady){
     try{ await auth.signOut(); }catch(e){ console.warn(e); }
   }
-  currentAuthUser = null;
   state.selectedCharacter = null;
   state.participantName = '';
   state.quizAnswers = { mood:null, note:null, song:'', share:[], shareDetails:{}, need:[], needOther:'', anecdote:'' };
@@ -1342,7 +1339,7 @@ document.getElementById('love-send').addEventListener('click', ()=>{
   messages.push({ name, text, audioUrl: recordedBlobUrl });
   if(typeof firebaseReady !== 'undefined' && firebaseReady && db && text){
     db.collection('messages').add({
-      ownerId: (typeof currentAuthUser !== 'undefined' && currentAuthUser) ? currentAuthUser.uid : null,
+      ownerId: getCurrentUid(),
       name, text,
       characterId: state.selectedCharacter ? state.selectedCharacter.id : null,
       month: currentMonthTag(),
