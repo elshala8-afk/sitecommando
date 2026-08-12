@@ -144,6 +144,7 @@ function saveMonthlyConfigToCloud(){
 function saveParticipantToCloud(){
   if(typeof firebaseReady === 'undefined' || !firebaseReady || !db || !state.selectedCharacter) return;
   db.collection('participants').add({
+    ownerId: getCurrentUid(),
     name: state.participantName,
     characterId: state.selectedCharacter.id,
     mood: state.quizAnswers.mood,
@@ -159,7 +160,14 @@ function saveParticipantToCloud(){
   }).catch(err=> console.warn("Impossible d'enregistrer tes réponses dans Firebase :", err));
 }
 function getAnswersFor(c, isYou){
-  if(isYou){ return {name: state.participantName, ...state.quizAnswers}; }
+  if(isYou){
+    // Si le questionnaire de cette session est rempli, on l'affiche en priorité.
+    if(state.quizAnswers.mood) return {name: state.participantName, ...state.quizAnswers};
+    // Sinon (ex. retour sur le site après avoir déjà rejoint), on réaffiche
+    // tes propres réponses déjà envoyées à Firebase.
+    if(sharedParticipants[c.id]) return sharedParticipants[c.id];
+    return {name: state.participantName, ...state.quizAnswers};
+  }
   if(sharedParticipants[c.id]) return sharedParticipants[c.id];
   // En mode démo (pas de Firebase), on garde les exemples fictifs pour que
   // ce soit agréable à tester. Une fois Firebase branché, on affiche
@@ -252,6 +260,7 @@ function openModal(id){ document.getElementById(id).classList.add('active'); }
 function closeModal(id){ document.getElementById(id).classList.remove('active'); }
 
 /* ============ LOGIN ============ */
+const ACCESS_CODE = 'ETE2026'; // change-le si tu veux — cherche cette ligne pour le mettre à jour
 const loginForm = document.getElementById('login-form');
 const accessInput = document.getElementById('access-code');
 const loginError = document.getElementById('login-error');
@@ -263,7 +272,13 @@ loginForm.addEventListener('submit', (e)=>{
     loginError.classList.add('show');
     return;
   }
+  if(code !== ACCESS_CODE){
+    loginError.textContent = "Ce code ne correspond à aucune invitation — essaie encore.";
+    loginError.classList.add('show');
+    return;
+  }
   loginError.classList.remove('show');
+  if(tryRestoreSession()) return; // tu avais déjà rejoint : direct sur ton dashboard
   goToScreen('screen-select');
 });
 
@@ -290,6 +305,7 @@ function updateCharacterAvailability(){
   });
 }
 function chooseCharacter(c){
+  if(sharedParticipants[c.id]) return; // déjà pris — les personnes déjà inscrites utilisent "Retrouver mon espace"
   state.selectedCharacter = c;
   document.querySelectorAll('#character-grid .character').forEach(el=>{
     if(el.dataset.id === c.id){ el.classList.add('chosen'); } else { el.classList.add('fade-out'); }
@@ -297,14 +313,132 @@ function chooseCharacter(c){
   document.getElementById('letter-name').textContent = c.name;
   setTimeout(()=>{ openModal('modal-letter'); }, 650);
 }
-document.getElementById('letter-participant-name').addEventListener('input', ()=>{
-  document.getElementById('letter-continue').disabled = document.getElementById('letter-participant-name').value.trim().length === 0;
-});
-document.getElementById('letter-continue').addEventListener('click', ()=>{
-  state.participantName = document.getElementById('letter-participant-name').value.trim();
+
+/* ---------- identifiant technique (email fictif) à partir du prénom ---------- */
+function fakeEmailFor(prenom){
+  const slug = prenom.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/g,'');
+  return (slug || 'participant') + '@commando.local';
+}
+
+function checkLetterFormValid(){
+  const name = document.getElementById('letter-participant-name').value.trim();
+  const pass = document.getElementById('letter-participant-password').value;
+  document.getElementById('letter-continue').disabled = !(name.length > 0 && pass.length >= 6);
+}
+document.getElementById('letter-participant-name').addEventListener('input', checkLetterFormValid);
+document.getElementById('letter-participant-password').addEventListener('input', checkLetterFormValid);
+
+document.getElementById('letter-continue').addEventListener('click', async ()=>{
+  const name = document.getElementById('letter-participant-name').value.trim();
+  const password = document.getElementById('letter-participant-password').value;
+  const errorEl = document.getElementById('letter-error');
+  errorEl.classList.remove('show');
+
+  if(typeof authReady !== 'undefined' && authReady){
+    try{
+      const cred = await auth.createUserWithEmailAndPassword(fakeEmailFor(name), password);
+    }catch(err){
+      console.warn(err);
+      if(err.code === 'auth/email-already-in-use'){
+        errorEl.textContent = "Ce prénom a déjà un compte — utilise \"Déjà inscrit·e ?\" sur l'écran de connexion pour retrouver ton espace.";
+      } else if(err.code === 'auth/weak-password'){
+        errorEl.textContent = 'Ton mot de passe doit faire au moins 6 caractères.';
+      } else {
+        errorEl.textContent = "Impossible de créer ton espace pour le moment.";
+      }
+      errorEl.classList.add('show');
+      return;
+    }
+  }
+
+  state.participantName = name;
   document.getElementById('love-name').value = state.participantName;
   closeModal('modal-letter');
   goToScreen('screen-quiz');
+});
+
+/* ============ SE CONNECTER (retrouver son espace depuis un autre appareil) ============ */
+function getCurrentUid(){
+  return (typeof authReady !== 'undefined' && authReady && auth && auth.currentUser) ? auth.currentUser.uid : null;
+}
+function findOwnParticipant(uid){
+  for(const [charId, data] of Object.entries(sharedParticipants)){
+    if(data && data.ownerId === uid) return { charId, data };
+  }
+  return null;
+}
+function tryRestoreSession(){
+  const uid = getCurrentUid();
+  if(!uid) return false;
+  const found = findOwnParticipant(uid);
+  if(!found) return false;
+  const c = CHARACTERS.find(ch => ch.id === found.charId);
+  if(!c) return false;
+  state.selectedCharacter = c;
+  state.participantName = found.data.name;
+  document.getElementById('love-name').value = found.data.name;
+  initDashboard();
+  goToScreen('screen-dashboard');
+  return true;
+}
+document.getElementById('open-signin').addEventListener('click', ()=>{
+  document.getElementById('signin-name').value = '';
+  document.getElementById('signin-password').value = '';
+  document.getElementById('signin-error').classList.remove('show');
+  openModal('modal-signin');
+});
+document.getElementById('signin-close').addEventListener('click', ()=> closeModal('modal-signin'));
+document.getElementById('signin-submit').addEventListener('click', async ()=>{
+  const name = document.getElementById('signin-name').value.trim();
+  const password = document.getElementById('signin-password').value;
+  const errorEl = document.getElementById('signin-error');
+  errorEl.classList.remove('show');
+  if(!name || !password){
+    errorEl.textContent = 'Renseigne ton prénom et ton mot de passe.';
+    errorEl.classList.add('show');
+    return;
+  }
+  if(typeof authReady === 'undefined' || !authReady){
+    errorEl.textContent = "La connexion par mot de passe n'est pas disponible en mode démo local.";
+    errorEl.classList.add('show');
+    return;
+  }
+  try{
+    const cred = await auth.signInWithEmailAndPassword(fakeEmailFor(name), password);
+    closeModal('modal-signin');
+    let attempts = 0;
+    const tryFind = () => {
+      const found = findOwnParticipant(cred.user.uid);
+      if(found){
+        const c = CHARACTERS.find(ch => ch.id === found.charId);
+        if(c){
+          state.selectedCharacter = c;
+          state.participantName = found.data.name;
+          document.getElementById('love-name').value = found.data.name;
+          initDashboard();
+          goToScreen('screen-dashboard');
+          return;
+        }
+      }
+      attempts++;
+      if(attempts < 12){ setTimeout(tryFind, 300); }
+      else {
+        alert("Tu es connecté·e, mais on ne retrouve pas encore ton profil rempli — réessaie dans un instant, ou recommence le questionnaire si besoin.");
+        goToScreen('screen-select');
+      }
+    };
+    tryFind();
+  }catch(err){
+    console.warn(err);
+    if(err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential' || err.code === 'auth/invalid-login-credentials'){
+      errorEl.textContent = 'Mot de passe incorrect.';
+    } else if(err.code === 'auth/user-not-found'){
+      errorEl.textContent = "Aucun compte trouvé avec ce prénom — vérifie l'orthographe, ou inscris-toi d'abord.";
+    } else {
+      errorEl.textContent = 'Connexion impossible pour le moment.';
+    }
+    errorEl.classList.add('show');
+  }
 });
 
 /* ============ QUESTIONNAIRE MENSUEL ============ */
@@ -410,6 +544,19 @@ document.getElementById('quiz-submit').addEventListener('click', ()=>{
   saveParticipantToCloud();
   initDashboard();
   goToScreen('screen-dashboard');
+});
+
+/* ============ CHANGER D'IDENTITÉ (déconnexion) ============ */
+document.getElementById('switch-identity').addEventListener('click', async ()=>{
+  if(!confirm("Se déconnecter sur ce navigateur ? (utile si plusieurs personnes partagent le même appareil)")) return;
+  if(typeof authReady !== 'undefined' && authReady){
+    try{ await auth.signOut(); }catch(e){ console.warn(e); }
+  }
+  state.selectedCharacter = null;
+  state.participantName = '';
+  state.quizAnswers = { mood:null, note:null, song:'', share:[], shareDetails:{}, need:[], needOther:'', anecdote:'' };
+  goToScreen('screen-select');
+  updateCharacterAvailability();
 });
 
 /* ============ DASHBOARD ============ */
@@ -1192,6 +1339,7 @@ document.getElementById('love-send').addEventListener('click', ()=>{
   messages.push({ name, text, audioUrl: recordedBlobUrl });
   if(typeof firebaseReady !== 'undefined' && firebaseReady && db && text){
     db.collection('messages').add({
+      ownerId: getCurrentUid(),
       name, text,
       characterId: state.selectedCharacter ? state.selectedCharacter.id : null,
       month: currentMonthTag(),
