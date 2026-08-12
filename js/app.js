@@ -68,7 +68,7 @@ const MOCK_ANSWERS = {
 const state = {
   selectedCharacter: null,
   participantName: '',
-  quizAnswers: { mood:null, note:null, song:'', share:[], shareDetails:{}, need:[], needOther:'', anecdote:'' },
+  quizAnswers: { mood:null, note:null, song:'', share:[], shareDetails:{}, need:[], needOther:'', anecdote:'', events:'' },
   binome: null,
   playedGames: { blindtest:false, memory:false, quiz:false, imitation:false }
 };
@@ -121,6 +121,8 @@ function watchMonthlyConfig(){
     if(d.crea) monthlyConfig.crea = d.crea;
     if(d.lettreBody) monthlyConfig.lettreBody = d.lettreBody;
     if(d.lettreQuote) monthlyConfig.lettreQuote = d.lettreQuote;
+    monthlyConfig.lettreLinkText = d.lettreLinkText || null;
+    monthlyConfig.lettreLinkUrl = d.lettreLinkUrl || null;
     if(d.characterNames){
       monthlyConfig.characterNames = d.characterNames;
       Object.entries(d.characterNames).forEach(([id,name])=>{
@@ -137,6 +139,8 @@ function saveMonthlyConfigToCloud(){
     crea: monthlyConfig.crea,
     lettreBody: monthlyConfig.lettreBody,
     lettreQuote: monthlyConfig.lettreQuote,
+    lettreLinkText: monthlyConfig.lettreLinkText || null,
+    lettreLinkUrl: monthlyConfig.lettreLinkUrl || null,
     characterNames: monthlyConfig.characterNames || {},
     adminKey: ADMIN_PASSWORD // doit correspondre à la règle Firestore (voir firestore.rules)
   }, {merge:true}).catch(err=> console.warn("Impossible d'enregistrer la config dans Firebase :", err));
@@ -155,6 +159,7 @@ function saveParticipantToCloud(){
     need: state.quizAnswers.need,
     needOther: state.quizAnswers.needOther,
     anecdote: state.quizAnswers.anecdote,
+    events: state.quizAnswers.events,
     month: currentMonthTag(),
     timestamp: firebase.firestore.FieldValue.serverTimestamp()
   }).catch(err=> console.warn("Impossible d'enregistrer tes réponses dans Firebase :", err));
@@ -186,6 +191,7 @@ function getAllAnswersMap(){
 }
 function refreshLiveViews(){
   if(document.getElementById('modal-recs')?.classList.contains('active')) buildRecsFeed();
+  if(document.getElementById('modal-events')?.classList.contains('active')) buildEventsFeed();
   if(document.getElementById('modal-playlist')?.classList.contains('active')) renderPlaylist();
   if(document.getElementById('screen-dashboard')?.classList.contains('active')) buildDashCharacterGrid();
   updateCharacterAvailability();
@@ -541,6 +547,7 @@ document.getElementById('quiz-submit').addEventListener('click', ()=>{
   }
   state.quizAnswers.song = document.getElementById('song-of-month').value.trim();
   state.quizAnswers.anecdote = document.getElementById('anecdote-text').value.trim();
+  state.quizAnswers.events = document.getElementById('events-text').value.trim();
   saveParticipantToCloud();
   initDashboard();
   goToScreen('screen-dashboard');
@@ -674,6 +681,27 @@ function buildRecsFeed(){
   });
 }
 
+document.getElementById('open-events').addEventListener('click', ()=>{
+  buildEventsFeed();
+  openModal('modal-events');
+});
+document.getElementById('events-close').addEventListener('click', ()=> closeModal('modal-events'));
+function buildEventsFeed(){
+  const wrap = document.getElementById('events-feed');
+  const entries = [];
+  Object.values(getAllAnswersMap()).forEach(a=>{
+    if(a.events && a.events.trim()) entries.push({name:a.name, text:a.events.trim()});
+  });
+  wrap.innerHTML = '';
+  if(entries.length === 0){ wrap.innerHTML = '<div class="recs-feed-empty">Personne n\u2019a encore partagé ses événements du mois.</div>'; return; }
+  shuffle(entries).forEach(it=>{
+    const div = document.createElement('div');
+    div.className = 'recs-feed-item';
+    div.innerHTML = `<strong style="color:${colorForName(it.name)};">${it.name}</strong> — ${it.text}`;
+    wrap.appendChild(div);
+  });
+}
+
 /* ============ CLASSEMENT SUR L'ÉCRAN PRINCIPAL (format discret) ============ */
 function renderDashLeaderboard(){
   const wrap = document.getElementById('dash-leaderboard');
@@ -779,7 +807,7 @@ const DEFAULT_CREA = {
   where: "Sur notre groupe Commando 💛",
   when: "Quand vous voulez, avant la fin du mois."
 };
-let monthlyConfig = { crea: {...DEFAULT_CREA}, lettreBody: null, lettreQuote: null };
+let monthlyConfig = { crea: {...DEFAULT_CREA}, lettreBody: null, lettreQuote: null, lettreLinkText: null, lettreLinkUrl: null };
 
 function applyCreaToModal(){
   const c = monthlyConfig.crea || DEFAULT_CREA;
@@ -1161,6 +1189,15 @@ document.getElementById('open-lettre').addEventListener('click', ()=>{
   document.getElementById('lettre-title').textContent = `Lettre de ${MOIS_FR[new Date().getMonth()]}`;
   document.getElementById('lettre-body').textContent = body;
   document.getElementById('lettre-quote').textContent = quote ? '« ' + quote + ' »' : '';
+  const linkWrap = document.getElementById('lettre-link-wrap');
+  const linkEl = document.getElementById('lettre-link');
+  if(monthlyConfig.lettreLinkText && monthlyConfig.lettreLinkUrl){
+    linkEl.textContent = monthlyConfig.lettreLinkText;
+    linkEl.href = monthlyConfig.lettreLinkUrl;
+    linkWrap.style.display = 'block';
+  } else {
+    linkWrap.style.display = 'none';
+  }
   openModal('modal-lettre');
 });
 document.getElementById('lettre-close').addEventListener('click', ()=> closeModal('modal-lettre'));
@@ -1194,6 +1231,8 @@ function openAdminPanel(){
   document.getElementById('admin-crea-when').value = c.when;
   document.getElementById('admin-lettre-body').value = monthlyConfig.lettreBody || '';
   document.getElementById('admin-lettre-quote').value = monthlyConfig.lettreQuote || '';
+  document.getElementById('admin-lettre-link-text').value = monthlyConfig.lettreLinkText || '';
+  document.getElementById('admin-lettre-link-url').value = monthlyConfig.lettreLinkUrl || '';
   buildAdminCharactersList();
   document.getElementById('admin-status-note').textContent =
     (typeof firebaseReady !== 'undefined' && firebaseReady)
@@ -1236,6 +1275,8 @@ document.getElementById('admin-save').addEventListener('click', ()=>{
   };
   monthlyConfig.lettreBody = document.getElementById('admin-lettre-body').value.trim();
   monthlyConfig.lettreQuote = document.getElementById('admin-lettre-quote').value.trim();
+  monthlyConfig.lettreLinkText = document.getElementById('admin-lettre-link-text').value.trim();
+  monthlyConfig.lettreLinkUrl = document.getElementById('admin-lettre-link-url').value.trim();
 
   const characterNames = {};
   document.querySelectorAll('#admin-characters-list input').forEach(input=>{
