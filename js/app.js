@@ -93,9 +93,22 @@ function assetForCharacterId(id){
   const c = CHARACTERS.find(ch=>ch.id===id);
   return c ? c.asset : 'char_258';
 }
+let participantsUnsub = null, messagesUnsub = null, configUnsub = null;
+function attachRoomListeners(){
+  if(typeof firebaseReady === 'undefined' || !firebaseReady || !db || !currentRoomId) return;
+  // On coupe d'éventuels écouteurs d'une salle précédente (changement de salle
+  // dans la même session) avant d'en attacher de nouveaux, propres à cette salle.
+  if(participantsUnsub) participantsUnsub();
+  if(messagesUnsub) messagesUnsub();
+  if(configUnsub) configUnsub();
+  participantsUnsub = watchParticipants();
+  messagesUnsub = watchMessages();
+  configUnsub = watchMonthlyConfig();
+}
 function watchParticipants(){
-  if(typeof firebaseReady === 'undefined' || !firebaseReady || !db) return;
-  db.collection('participants')
+  if(typeof firebaseReady === 'undefined' || !firebaseReady || !db || !currentRoomId) return null;
+  return db.collection('participants')
+    .where('roomId','==', currentRoomId)
     .where('month','==', currentMonthTag())
     .onSnapshot(snapshot=>{
       const latest = {};
@@ -111,16 +124,20 @@ function watchParticipants(){
     }, err=>{ console.warn('Lecture Firestore (participants) impossible :', err); });
 }
 function watchMessages(){
-  if(typeof firebaseReady === 'undefined' || !firebaseReady || !db) return;
-  db.collection('messages')
+  if(typeof firebaseReady === 'undefined' || !firebaseReady || !db || !currentRoomId) return null;
+  return db.collection('messages')
+    .where('roomId','==', currentRoomId)
     .where('month','==', currentMonthTag())
     .onSnapshot(snapshot=>{
       cloudMessagesCache = snapshot.docs.map(d=>d.data());
     }, err=>{ console.warn('Lecture Firestore (messages) impossible :', err); });
 }
+function configDocId(){
+  return currentRoomId ? `${currentRoomId}_monthly` : 'monthly';
+}
 function watchMonthlyConfig(){
-  if(typeof firebaseReady === 'undefined' || !firebaseReady || !db) return;
-  db.collection('config').doc('monthly').onSnapshot(doc=>{
+  if(typeof firebaseReady === 'undefined' || !firebaseReady || !db || !currentRoomId) return null;
+  return db.collection('config').doc(configDocId()).onSnapshot(doc=>{
     if(!doc.exists) return;
     const d = doc.data();
     if(d.crea) monthlyConfig.crea = d.crea;
@@ -157,8 +174,9 @@ function watchMonthlyConfig(){
   }, err=>{ console.warn('Lecture Firestore (config) impossible :', err); });
 }
 function saveMonthlyConfigToCloud(){
-  if(typeof firebaseReady === 'undefined' || !firebaseReady || !db) return;
-  db.collection('config').doc('monthly').set({
+  if(typeof firebaseReady === 'undefined' || !firebaseReady || !db || !currentRoomId) return;
+  db.collection('config').doc(configDocId()).set({
+    roomId: currentRoomId,
     crea: monthlyConfig.crea,
     lettreBody: monthlyConfig.lettreBody,
     lettreQuote: monthlyConfig.lettreQuote,
@@ -167,12 +185,13 @@ function saveMonthlyConfigToCloud(){
     characterNames: monthlyConfig.characterNames || {},
     characterActive: monthlyConfig.characterActive || {},
     characterDeleted: monthlyConfig.characterDeleted || {},
-    adminKey: ADMIN_PASSWORD // doit correspondre à la règle Firestore (voir firestore.rules)
+    adminKey: currentRoomAdminPassword // doit correspondre au mot de passe admin de CETTE salle
   }, {merge:true}).catch(err=> console.warn("Impossible d'enregistrer la config dans Firebase :", err));
 }
 function saveParticipantToCloud(){
-  if(typeof firebaseReady === 'undefined' || !firebaseReady || !db || !state.selectedCharacter) return;
+  if(typeof firebaseReady === 'undefined' || !firebaseReady || !db || !state.selectedCharacter || !currentRoomId) return;
   db.collection('participants').add({
+    roomId: currentRoomId,
     ownerId: getCurrentUid(),
     name: state.participantName,
     characterId: state.selectedCharacter.id,
@@ -303,25 +322,64 @@ function goToScreen(id){
 function openModal(id){ document.getElementById(id).classList.add('active'); }
 function closeModal(id){ document.getElementById(id).classList.remove('active'); }
 
-/* ============ LOGIN ============ */
-const ACCESS_CODE = 'ETE2026'; // change-le si tu veux — cherche cette ligne pour le mettre à jour
+/* ============ LOGIN / SALLES ============ */
+// Mode démo (pas de Firebase) : une seule salle virtuelle, comportement inchangé.
+const DEMO_ACCESS_CODE = 'ETE2026';
+const DEMO_ADMIN_PASSWORD = 'commando2026';
+
+let currentRoomId = null;
+let currentRoomAdminPassword = null;
+let currentRoomName = null;
+
 const loginForm = document.getElementById('login-form');
 const accessInput = document.getElementById('access-code');
 const loginError = document.getElementById('login-error');
-loginForm.addEventListener('submit', (e)=>{
+
+// Cherche la salle correspondant au code tapé. Renvoie true si trouvée
+// (et remplit currentRoomId / currentRoomAdminPassword), false sinon.
+async function resolveRoomFromCode(code){
+  if(typeof firebaseReady === 'undefined' || !firebaseReady || !db){
+    if(code.toUpperCase() !== DEMO_ACCESS_CODE) return false;
+    currentRoomId = 'demo';
+    currentRoomAdminPassword = DEMO_ADMIN_PASSWORD;
+    currentRoomName = 'Démo';
+    return true;
+  }
+  try{
+    const snap = await db.collection('rooms').where('accessCode','==', code).limit(1).get();
+    if(snap.empty) return false;
+    const roomDoc = snap.docs[0];
+    currentRoomId = roomDoc.id;
+    currentRoomAdminPassword = roomDoc.data().adminPassword;
+    currentRoomName = roomDoc.data().name || roomDoc.id;
+    return true;
+  }catch(err){
+    console.warn('Recherche de salle impossible :', err);
+    return false;
+  }
+}
+
+loginForm.addEventListener('submit', async (e)=>{
   e.preventDefault();
-  const code = accessInput.value.trim().toUpperCase();
+  const code = accessInput.value.trim();
   if(code.length === 0){
     loginError.textContent = "Un petit code, et on t'ouvre la porte.";
     loginError.classList.add('show');
     return;
   }
-  if(code !== ACCESS_CODE){
+  const submitBtn = loginForm.querySelector('button[type="submit"]');
+  submitBtn.disabled = true;
+  const found = await resolveRoomFromCode(code);
+  submitBtn.disabled = false;
+  if(!found){
     loginError.textContent = "Ce code ne correspond à aucune invitation — essaie encore.";
     loginError.classList.add('show');
     return;
   }
   loginError.classList.remove('show');
+  // Une fois la salle connue, on s'assure que les données affichées lui
+  // correspondent (les écouteurs Firestore sont ré-attachés pour cette salle).
+  attachRoomListeners();
   if(tryRestoreSession()) return; // tu avais déjà rejoint : direct sur ton dashboard
   buildCharacterGrid(); // les images des personnages ne se chargent qu'à ce moment-là
   goToScreen('screen-select');
@@ -629,12 +687,9 @@ document.getElementById('edit-answers').addEventListener('click', ()=>{
   document.getElementById('quiz-submit').textContent = 'Enregistrer mes changements →';
   goToScreen('screen-quiz');
 });
-// Ces trois appels sont protégés : si js/firebase-config.js contient une erreur
-// (ex. une virgule ou un guillemet oublié en collant ta config), le reste du
-// site continue de fonctionner normalement au lieu de se bloquer entièrement.
-try { watchParticipants(); } catch(e){ console.warn('watchParticipants() a échoué — vérifie js/firebase-config.js', e); }
-try { watchMessages(); } catch(e){ console.warn('watchMessages() a échoué — vérifie js/firebase-config.js', e); }
-try { watchMonthlyConfig(); } catch(e){ console.warn('watchMonthlyConfig() a échoué — vérifie js/firebase-config.js', e); }
+// Les écouteurs Firestore (participants, messages, config) ne démarrent
+// qu'une fois la salle connue — voir attachRoomListeners(), appelée après
+// une connexion réussie ou une session restaurée.
 
 document.getElementById('quiz-submit').addEventListener('click', ()=>{
   if(!state.quizAnswers.mood || !state.quizAnswers.note){
@@ -1285,9 +1340,21 @@ document.getElementById('open-lettre').addEventListener('click', ()=>{
 document.getElementById('lettre-close').addEventListener('click', ()=> closeModal('modal-lettre'));
 
 /* ============ MODE ADMIN ============ */
-const ADMIN_PASSWORD = 'commando2026'; // change-le si tu veux — ce n'est pas une vraie sécurité, juste un filtre simple
-document.getElementById('open-admin').addEventListener('click', (e)=>{
+document.getElementById('open-admin').addEventListener('click', async (e)=>{
   e.preventDefault();
+  const code = accessInput.value.trim();
+  if(code.length === 0){
+    loginError.textContent = "Tape d'abord le code d'accès de la salle que tu veux administrer.";
+    loginError.classList.add('show');
+    return;
+  }
+  const found = await resolveRoomFromCode(code);
+  if(!found){
+    loginError.textContent = "Ce code ne correspond à aucune salle.";
+    loginError.classList.add('show');
+    return;
+  }
+  loginError.classList.remove('show');
   document.getElementById('admin-password').value = '';
   document.getElementById('admin-gate-error').classList.remove('show');
   openModal('modal-admin-gate');
@@ -1295,10 +1362,11 @@ document.getElementById('open-admin').addEventListener('click', (e)=>{
 document.getElementById('admin-gate-close').addEventListener('click', ()=> closeModal('modal-admin-gate'));
 document.getElementById('admin-gate-submit').addEventListener('click', ()=>{
   const val = document.getElementById('admin-password').value;
-  if(val !== ADMIN_PASSWORD){
+  if(val !== currentRoomAdminPassword){
     document.getElementById('admin-gate-error').classList.add('show');
     return;
   }
+  attachRoomListeners();
   closeModal('modal-admin-gate');
   openAdminPanel();
 });
@@ -1425,13 +1493,14 @@ document.getElementById('admin-archive-reset').addEventListener('click', async (
   try{
     const monthTag = currentMonthTag();
     const [participantsSnap, messagesSnap] = await Promise.all([
-      db.collection('participants').where('month','==', monthTag).get(),
-      db.collection('messages').where('month','==', monthTag).get()
+      db.collection('participants').where('roomId','==', currentRoomId).where('month','==', monthTag).get(),
+      db.collection('messages').where('roomId','==', currentRoomId).where('month','==', monthTag).get()
     ]);
     const participantsData = participantsSnap.docs.map(d=> d.data());
     const messagesData = messagesSnap.docs.map(d=> d.data());
 
-    await db.collection('archives').doc(`${monthTag}_${Date.now()}`).set({
+    await db.collection('archives').doc(`${currentRoomId}_${monthTag}_${Date.now()}`).set({
+      roomId: currentRoomId,
       month: monthTag,
       participants: participantsData,
       messages: messagesData,
@@ -1439,7 +1508,7 @@ document.getElementById('admin-archive-reset').addEventListener('click', async (
       lettreBody: monthlyConfig.lettreBody || null,
       lettreQuote: monthlyConfig.lettreQuote || null,
       archivedAt: firebase.firestore.FieldValue.serverTimestamp(),
-      adminKey: ADMIN_PASSWORD
+      adminKey: currentRoomAdminPassword
     });
 
     const batch = db.batch();
@@ -1555,6 +1624,7 @@ document.getElementById('love-send').addEventListener('click', ()=>{
   messages.push({ name, text, audioUrl: recordedBlobUrl });
   if(typeof firebaseReady !== 'undefined' && firebaseReady && db && text){
     db.collection('messages').add({
+      roomId: currentRoomId,
       ownerId: getCurrentUid(),
       name, text,
       characterId: state.selectedCharacter ? state.selectedCharacter.id : null,
