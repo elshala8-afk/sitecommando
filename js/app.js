@@ -93,22 +93,9 @@ function assetForCharacterId(id){
   const c = CHARACTERS.find(ch=>ch.id===id);
   return c ? c.asset : 'char_258';
 }
-let participantsUnsub = null, messagesUnsub = null, configUnsub = null;
-function attachRoomListeners(){
-  if(typeof firebaseReady === 'undefined' || !firebaseReady || !db || !currentRoomId) return;
-  // On coupe d'éventuels écouteurs d'une salle précédente (changement de salle
-  // dans la même session) avant d'en attacher de nouveaux, propres à cette salle.
-  if(participantsUnsub) participantsUnsub();
-  if(messagesUnsub) messagesUnsub();
-  if(configUnsub) configUnsub();
-  participantsUnsub = watchParticipants();
-  messagesUnsub = watchMessages();
-  configUnsub = watchMonthlyConfig();
-}
 function watchParticipants(){
-  if(typeof firebaseReady === 'undefined' || !firebaseReady || !db || !currentRoomId) return null;
-  return db.collection('participants')
-    .where('roomId','==', currentRoomId)
+  if(typeof firebaseReady === 'undefined' || !firebaseReady || !db) return;
+  db.collection('participants')
     .where('month','==', currentMonthTag())
     .onSnapshot(snapshot=>{
       const latest = {};
@@ -124,20 +111,16 @@ function watchParticipants(){
     }, err=>{ console.warn('Lecture Firestore (participants) impossible :', err); });
 }
 function watchMessages(){
-  if(typeof firebaseReady === 'undefined' || !firebaseReady || !db || !currentRoomId) return null;
-  return db.collection('messages')
-    .where('roomId','==', currentRoomId)
+  if(typeof firebaseReady === 'undefined' || !firebaseReady || !db) return;
+  db.collection('messages')
     .where('month','==', currentMonthTag())
     .onSnapshot(snapshot=>{
       cloudMessagesCache = snapshot.docs.map(d=>d.data());
     }, err=>{ console.warn('Lecture Firestore (messages) impossible :', err); });
 }
-function configDocId(){
-  return currentRoomId ? `${currentRoomId}_monthly` : 'monthly';
-}
 function watchMonthlyConfig(){
-  if(typeof firebaseReady === 'undefined' || !firebaseReady || !db || !currentRoomId) return null;
-  return db.collection('config').doc(configDocId()).onSnapshot(doc=>{
+  if(typeof firebaseReady === 'undefined' || !firebaseReady || !db) return;
+  db.collection('config').doc('monthly').onSnapshot(doc=>{
     if(!doc.exists) return;
     const d = doc.data();
     if(d.crea) monthlyConfig.crea = d.crea;
@@ -174,9 +157,8 @@ function watchMonthlyConfig(){
   }, err=>{ console.warn('Lecture Firestore (config) impossible :', err); });
 }
 function saveMonthlyConfigToCloud(){
-  if(typeof firebaseReady === 'undefined' || !firebaseReady || !db || !currentRoomId) return;
-  db.collection('config').doc(configDocId()).set({
-    roomId: currentRoomId,
+  if(typeof firebaseReady === 'undefined' || !firebaseReady || !db) return;
+  db.collection('config').doc('monthly').set({
     crea: monthlyConfig.crea,
     lettreBody: monthlyConfig.lettreBody,
     lettreQuote: monthlyConfig.lettreQuote,
@@ -185,13 +167,12 @@ function saveMonthlyConfigToCloud(){
     characterNames: monthlyConfig.characterNames || {},
     characterActive: monthlyConfig.characterActive || {},
     characterDeleted: monthlyConfig.characterDeleted || {},
-    adminKey: currentRoomAdminPassword // doit correspondre au mot de passe admin de CETTE salle
+    adminKey: ADMIN_PASSWORD // doit correspondre à la règle Firestore (voir firestore.rules)
   }, {merge:true}).catch(err=> console.warn("Impossible d'enregistrer la config dans Firebase :", err));
 }
 function saveParticipantToCloud(){
-  if(typeof firebaseReady === 'undefined' || !firebaseReady || !db || !state.selectedCharacter || !currentRoomId) return;
+  if(typeof firebaseReady === 'undefined' || !firebaseReady || !db || !state.selectedCharacter) return;
   db.collection('participants').add({
-    roomId: currentRoomId,
     ownerId: getCurrentUid(),
     name: state.participantName,
     characterId: state.selectedCharacter.id,
@@ -322,70 +303,25 @@ function goToScreen(id){
 function openModal(id){ document.getElementById(id).classList.add('active'); }
 function closeModal(id){ document.getElementById(id).classList.remove('active'); }
 
-/* ============ LOGIN / SALLES ============ */
-// Mode démo (pas de Firebase) : une seule salle virtuelle, comportement inchangé.
-const DEMO_ACCESS_CODE = 'ETE2026';
-const DEMO_ADMIN_PASSWORD = 'commando2026';
-
-let currentRoomId = null;
-let currentRoomAdminPassword = null;
-let currentRoomName = null;
-
+/* ============ LOGIN ============ */
+const ACCESS_CODE = 'ETE2026'; // change-le si tu veux — cherche cette ligne pour le mettre à jour
 const loginForm = document.getElementById('login-form');
 const accessInput = document.getElementById('access-code');
 const loginError = document.getElementById('login-error');
-
-// Cherche la salle correspondant au code tapé. Renvoie true si trouvée
-// (et remplit currentRoomId / currentRoomAdminPassword), false sinon.
-async function resolveRoomFromCode(code){
-  if(typeof firebaseReady === 'undefined' || !firebaseReady || !db){
-    if(code.toUpperCase() !== DEMO_ACCESS_CODE) return {found:false};
-    currentRoomId = 'demo';
-    currentRoomAdminPassword = DEMO_ADMIN_PASSWORD;
-    currentRoomName = 'Démo';
-    return {found:true};
-  }
-  try{
-    const attempts = [code, code.toUpperCase(), code.toLowerCase()];
-    let roomDoc = null;
-    for(const attempt of attempts){
-      const snap = await db.collection('rooms').where('accessCode','==', attempt).limit(1).get();
-      if(!snap.empty){ roomDoc = snap.docs[0]; break; }
-    }
-    if(!roomDoc) return {found:false};
-    currentRoomId = roomDoc.id;
-    currentRoomAdminPassword = roomDoc.data().adminPassword;
-    currentRoomName = roomDoc.data().name || roomDoc.id;
-    return {found:true};
-  }catch(err){
-    console.warn('Recherche de salle impossible :', err);
-    return {found:false, error: (err && err.code) ? err.code : String(err)};
-  }
-}
-
-loginForm.addEventListener('submit', async (e)=>{
+loginForm.addEventListener('submit', (e)=>{
   e.preventDefault();
-  const code = accessInput.value.trim();
+  const code = accessInput.value.trim().toUpperCase();
   if(code.length === 0){
     loginError.textContent = "Un petit code, et on t'ouvre la porte.";
     loginError.classList.add('show');
     return;
   }
-  const submitBtn = loginForm.querySelector('button[type="submit"]');
-  submitBtn.disabled = true;
-  const result = await resolveRoomFromCode(code);
-  submitBtn.disabled = false;
-  if(!result.found){
-    loginError.textContent = result.error
-      ? `Ce code ne correspond à aucune invitation — essaie encore. (détail technique : ${result.error})`
-      : "Ce code ne correspond à aucune invitation — essaie encore.";
+  if(code !== ACCESS_CODE){
+    loginError.textContent = "Ce code ne correspond à aucune invitation — essaie encore.";
     loginError.classList.add('show');
     return;
   }
   loginError.classList.remove('show');
-  // Une fois la salle connue, on s'assure que les données affichées lui
-  // correspondent (les écouteurs Firestore sont ré-attachés pour cette salle).
-  attachRoomListeners();
   if(tryRestoreSession()) return; // tu avais déjà rejoint : direct sur ton dashboard
   buildCharacterGrid(); // les images des personnages ne se chargent qu'à ce moment-là
   goToScreen('screen-select');
@@ -394,11 +330,6 @@ loginForm.addEventListener('submit', async (e)=>{
 /* ============ CHOIX DU PERSONNAGE ============ */
 const characterGrid = document.getElementById('character-grid');
 let characterGridBuilt = false;
-// Ces 4 personnages sont affichés 50% plus grands que les autres partout
-// où ils apparaissent (voir la classe CSS .char-large dans style.css).
-const LARGE_CHARACTERS = ['266','267','268','269'];
-function charImgClass(id){ return LARGE_CHARACTERS.includes(id) ? ' char-large' : ''; }
-
 function buildCharacterGrid(){
   characterGridBuilt = true;
   characterGrid.innerHTML = '';
@@ -408,7 +339,7 @@ function buildCharacterGrid(){
     btn.className = 'character';
     btn.type = 'button';
     btn.dataset.id = c.id;
-    btn.innerHTML = `<img class="${charImgClass(c.id).trim()}" src="${ASSETS[c.asset]}" alt="${c.name}"><span class="name">${c.name}</span>`;
+    btn.innerHTML = `<img src="${ASSETS[c.asset]}" alt="${c.name}"><span class="name">${c.name}</span>`;
     btn.addEventListener('click', ()=> chooseCharacter(c));
     characterGrid.appendChild(btn);
   });
@@ -427,18 +358,6 @@ function updateCharacterAvailability(){
 function chooseCharacter(c){
   if(sharedParticipants[c.id]) return; // déjà pris — les personnes déjà inscrites utilisent "Retrouver mon espace"
   state.selectedCharacter = c;
-  const uid = typeof getCurrentUid === 'function' ? getCurrentUid() : null;
-  if(uid){
-    // Déjà connecté·e (nouveau mois, compte déjà créé les mois précédents) —
-    // pas besoin de repasser par la création de compte, direct au questionnaire.
-    if(typeof auth !== 'undefined' && auth && auth.currentUser && auth.currentUser.displayName){
-      state.participantName = auth.currentUser.displayName;
-    }
-    document.getElementById('love-name').value = state.participantName || '';
-    document.getElementById('quiz-submit').textContent = 'Rejoindre la Commando →';
-    goToScreen('screen-quiz');
-    return;
-  }
   document.querySelectorAll('#character-grid .character').forEach(el=>{
     if(el.dataset.id === c.id){ el.classList.add('chosen'); } else { el.classList.add('fade-out'); }
   });
@@ -469,13 +388,10 @@ document.getElementById('letter-continue').addEventListener('click', async ()=>{
   if(typeof authReady !== 'undefined' && authReady){
     try{
       const cred = await auth.createUserWithEmailAndPassword(fakeEmailFor(name), password);
-      if(cred && cred.user && cred.user.updateProfile){
-        try{ await cred.user.updateProfile({displayName: name}); }catch(e){ console.warn('Nom non enregistré sur le compte :', e); }
-      }
     }catch(err){
       console.warn(err);
       if(err.code === 'auth/email-already-in-use'){
-        errorEl.textContent = "Ce prénom a déjà un compte. Si c'est le tien, utilise \"Déjà inscrit·e ?\" sur l'écran de connexion. Si vous êtes deux à porter ce prénom dans la Commando, ajoute une précision (ex. \"Charlotte B\") et réessaie.";
+        errorEl.textContent = "Ce prénom a déjà un compte — utilise \"Déjà inscrit·e ?\" sur l'écran de connexion pour retrouver ton espace.";
       } else if(err.code === 'auth/weak-password'){
         errorEl.textContent = 'Ton mot de passe doit faire au moins 6 caractères.';
       } else {
@@ -559,7 +475,7 @@ document.getElementById('signin-submit').addEventListener('click', async ()=>{
       attempts++;
       if(attempts < 12){ setTimeout(tryFind, 300); }
       else {
-        alert("Tu es connecté·e ! Tu n'as pas encore répondu pour ce mois-ci — choisis ton personnage pour rejoindre.");
+        alert("Tu es connecté·e, mais on ne retrouve pas encore ton profil rempli — réessaie dans un instant, ou recommence le questionnaire si besoin.");
         if(!characterGridBuilt) buildCharacterGrid();
         goToScreen('screen-select');
       }
@@ -698,9 +614,12 @@ document.getElementById('edit-answers').addEventListener('click', ()=>{
   document.getElementById('quiz-submit').textContent = 'Enregistrer mes changements →';
   goToScreen('screen-quiz');
 });
-// Les écouteurs Firestore (participants, messages, config) ne démarrent
-// qu'une fois la salle connue — voir attachRoomListeners(), appelée après
-// une connexion réussie ou une session restaurée.
+// Ces trois appels sont protégés : si js/firebase-config.js contient une erreur
+// (ex. une virgule ou un guillemet oublié en collant ta config), le reste du
+// site continue de fonctionner normalement au lieu de se bloquer entièrement.
+try { watchParticipants(); } catch(e){ console.warn('watchParticipants() a échoué — vérifie js/firebase-config.js', e); }
+try { watchMessages(); } catch(e){ console.warn('watchMessages() a échoué — vérifie js/firebase-config.js', e); }
+try { watchMonthlyConfig(); } catch(e){ console.warn('watchMonthlyConfig() a échoué — vérifie js/firebase-config.js', e); }
 
 document.getElementById('quiz-submit').addEventListener('click', ()=>{
   if(!state.quizAnswers.mood || !state.quizAnswers.note){
@@ -753,7 +672,7 @@ function buildDashCharacterGrid(){
     if(!isYou && !answers) return; // personne n'a encore rejoint avec ce personnage ce mois-ci
     const btn = document.createElement('button');
     btn.className = 'character';
-    btn.innerHTML = `<img class="${charImgClass(c.id).trim()}" src="${ASSETS[c.asset]}" alt="${c.name}"><span class="name">${c.name}</span>${isYou ? '<span class="you-badge">C\'est toi</span>' : ''}`;
+    btn.innerHTML = `<img src="${ASSETS[c.asset]}" alt="${c.name}"><span class="name">${c.name}</span>${isYou ? '<span class="you-badge">C\'est toi</span>' : ''}`;
     btn.addEventListener('click', ()=> openFicheDetail(c, isYou));
     wrap.appendChild(btn);
   });
@@ -778,7 +697,6 @@ function openFicheDetail(c, isYou){
   const moodMeta = findMeta(MOODS, answers.mood);
   document.getElementById('fiche-img').src = ASSETS[c.asset];
   document.getElementById('fiche-img').alt = c.name;
-  document.getElementById('fiche-img').className = charImgClass(c.id).trim();
   document.getElementById('fiche-name').textContent = c.name;
   document.getElementById('fiche-tag').textContent = isYou ? `Ta fiche · ${answers.name}` : `${answers.name} · La Commando`;
   setIcon(document.getElementById('fiche-mood-icon'), moodMeta ? moodMeta.icon : 'sun');
@@ -1352,23 +1270,9 @@ document.getElementById('open-lettre').addEventListener('click', ()=>{
 document.getElementById('lettre-close').addEventListener('click', ()=> closeModal('modal-lettre'));
 
 /* ============ MODE ADMIN ============ */
-document.getElementById('open-admin').addEventListener('click', async (e)=>{
+const ADMIN_PASSWORD = 'commando2026'; // change-le si tu veux — ce n'est pas une vraie sécurité, juste un filtre simple
+document.getElementById('open-admin').addEventListener('click', (e)=>{
   e.preventDefault();
-  const code = accessInput.value.trim();
-  if(code.length === 0){
-    loginError.textContent = "Tape d'abord le code d'accès de la salle que tu veux administrer.";
-    loginError.classList.add('show');
-    return;
-  }
-  const result = await resolveRoomFromCode(code);
-  if(!result.found){
-    loginError.textContent = result.error
-      ? `Ce code ne correspond à aucune salle. (détail technique : ${result.error})`
-      : "Ce code ne correspond à aucune salle.";
-    loginError.classList.add('show');
-    return;
-  }
-  loginError.classList.remove('show');
   document.getElementById('admin-password').value = '';
   document.getElementById('admin-gate-error').classList.remove('show');
   openModal('modal-admin-gate');
@@ -1376,11 +1280,10 @@ document.getElementById('open-admin').addEventListener('click', async (e)=>{
 document.getElementById('admin-gate-close').addEventListener('click', ()=> closeModal('modal-admin-gate'));
 document.getElementById('admin-gate-submit').addEventListener('click', ()=>{
   const val = document.getElementById('admin-password').value;
-  if(val !== currentRoomAdminPassword){
+  if(val !== ADMIN_PASSWORD){
     document.getElementById('admin-gate-error').classList.add('show');
     return;
   }
-  attachRoomListeners();
   closeModal('modal-admin-gate');
   openAdminPanel();
 });
@@ -1412,7 +1315,7 @@ function buildAdminCharactersList(){
     const row = document.createElement('div');
     row.className = 'admin-char-row';
     row.innerHTML = `
-      <img class="${charImgClass(c.id).trim()}" src="${ASSETS[c.asset]}" alt="">
+      <img src="${ASSETS[c.asset]}" alt="">
       <input type="text" data-char-id="${c.id}" value="${c.name}">
       <label class="admin-char-active"><input type="checkbox" data-active-id="${c.id}" ${c.active !== false ? 'checked' : ''}> Actif</label>
       <button type="button" class="admin-char-delete" data-delete-id="${c.id}" title="Supprimer ce personnage">🗑</button>
@@ -1499,7 +1402,7 @@ document.getElementById('admin-archive-reset').addEventListener('click', async (
     note.textContent = "Cette fonction a besoin de Firebase — en mode démo locale, il n'y a rien à archiver (rien n'est partagé de toute façon).";
     return;
   }
-  if(!confirm("Passer au mois suivant ?\n\nCeci va :\n• archiver puis effacer toutes les réponses de ce mois-ci\n• vider la créa du mois et la lettre du mois (à réécrire pour le nouveau thème)\n\nRien n'est perdu — tout reste consultable dans Firebase, dans la collection \"archives\".\n\nCette action est immédiate et ne peut pas être annulée depuis l'app.")) return;
+  if(!confirm("Archiver les réponses de ce mois-ci et repartir à zéro pour toute la Commando ?\n\nRien n'est perdu — tout reste consultable dans Firebase, dans la collection \"archives\".\n\nCette action est immédiate et ne peut pas être annulée depuis l'app.")) return;
 
   const btn = document.getElementById('admin-archive-reset');
   btn.disabled = true;
@@ -1507,22 +1410,18 @@ document.getElementById('admin-archive-reset').addEventListener('click', async (
   try{
     const monthTag = currentMonthTag();
     const [participantsSnap, messagesSnap] = await Promise.all([
-      db.collection('participants').where('roomId','==', currentRoomId).where('month','==', monthTag).get(),
-      db.collection('messages').where('roomId','==', currentRoomId).where('month','==', monthTag).get()
+      db.collection('participants').where('month','==', monthTag).get(),
+      db.collection('messages').where('month','==', monthTag).get()
     ]);
     const participantsData = participantsSnap.docs.map(d=> d.data());
     const messagesData = messagesSnap.docs.map(d=> d.data());
 
-    await db.collection('archives').doc(`${currentRoomId}_${monthTag}_${Date.now()}`).set({
-      roomId: currentRoomId,
+    await db.collection('archives').doc(`${monthTag}_${Date.now()}`).set({
       month: monthTag,
       participants: participantsData,
       messages: messagesData,
-      crea: monthlyConfig.crea || null,
-      lettreBody: monthlyConfig.lettreBody || null,
-      lettreQuote: monthlyConfig.lettreQuote || null,
       archivedAt: firebase.firestore.FieldValue.serverTimestamp(),
-      adminKey: currentRoomAdminPassword
+      adminKey: ADMIN_PASSWORD
     });
 
     const batch = db.batch();
@@ -1530,24 +1429,14 @@ document.getElementById('admin-archive-reset').addEventListener('click', async (
     messagesSnap.docs.forEach(doc=> batch.delete(doc.ref));
     await batch.commit();
 
-    // Nouveau mois = nouveau thème : on vide la créa et la lettre pour que
-    // le mode admin les réécrive fraîches (au lieu de garder l'ancien contenu).
-    monthlyConfig.crea = {...DEFAULT_CREA};
-    monthlyConfig.lettreBody = '';
-    monthlyConfig.lettreQuote = '';
-    monthlyConfig.lettreLinkText = '';
-    monthlyConfig.lettreLinkUrl = '';
-    await saveMonthlyConfigToCloud();
-
     sharedParticipants = {};
     cloudMessagesCache = [];
     refreshLiveViews();
-    if(document.getElementById('modal-admin').classList.contains('active')) openAdminPanel();
 
     const confirmEl = document.getElementById('admin-archive-confirm');
     confirmEl.classList.add('show');
     setTimeout(()=> confirmEl.classList.remove('show'), 3000);
-    note.textContent = `${participantsData.length} réponse(s) et ${messagesData.length} message(s) archivés. Créa et lettre remises à blanc — à réécrire pour le nouveau mois.`;
+    note.textContent = `${participantsData.length} réponse(s) et ${messagesData.length} message(s) archivés.`;
   }catch(err){
     console.warn("Impossible d'archiver le mois :", err);
     note.textContent = "Une erreur est survenue pendant l'archivage — vérifie que les règles Firestore sont bien à jour.";
@@ -1638,7 +1527,6 @@ document.getElementById('love-send').addEventListener('click', ()=>{
   messages.push({ name, text, audioUrl: recordedBlobUrl });
   if(typeof firebaseReady !== 'undefined' && firebaseReady && db && text){
     db.collection('messages').add({
-      roomId: currentRoomId,
       ownerId: getCurrentUid(),
       name, text,
       characterId: state.selectedCharacter ? state.selectedCharacter.id : null,
