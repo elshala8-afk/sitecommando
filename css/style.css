@@ -47,7 +47,6 @@
   .admin-link:hover{ color:#7a6c54; }
   .admin-char-row{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
   .admin-char-row img{ width:40px; height:40px; object-fit:contain; flex-shrink:0; background:var(--beige); border-radius:10px; padding:4px; }
-  .admin-char-row img.char-large{ width:60px; height:60px; }
   .admin-char-row input[type="text"]{ flex:1; min-width:110px; font-family:'Work Sans'; font-size:14px; color:var(--noir); background:var(--white-soft); border:1.5px solid rgba(33,28,22,0.15); border-radius:12px; padding:10px 13px; outline:none; }
   .admin-char-row input[type="text"]:focus{ border-color:var(--terracotta); }
   .admin-char-active{ display:flex; align-items:center; gap:5px; font-size:12px; color:#5a5040; white-space:nowrap; cursor:pointer; }
@@ -64,7 +63,6 @@
   .character-grid{ display:flex; flex-wrap:wrap; justify-content:center; align-items:flex-end; gap:2px 18px; }
   .character{ background:none; border:none; padding:10px; display:flex; flex-direction:column; align-items:center; gap:10px; border-radius:20px; transition:transform .35s var(--ease); }
   .character img{ width:150px; height:auto; display:block; filter:drop-shadow(0 14px 20px rgba(0,0,0,.28)); animation:floaty 5.5s ease-in-out infinite; transition:transform .35s var(--ease), filter .35s; }
-  .character img.char-large{ width:225px; }
   .character:nth-child(2n) img{ animation-duration:6.4s; animation-delay:-1.2s; }
   .character:nth-child(3n) img{ animation-duration:4.8s; animation-delay:-2.4s; }
   .character:nth-child(5n) img{ transform:translateY(6px); }
@@ -164,7 +162,6 @@
   }
   #dash-character-grid.card-style .character:hover{ transform:translateY(-6px); box-shadow:0 20px 36px rgba(0,0,0,.24); }
   #dash-character-grid.card-style .character img{ width:92px; height:92px; object-fit:contain; animation:none; filter:drop-shadow(0 8px 14px rgba(0,0,0,.14)); }
-  #dash-character-grid.card-style .character img.char-large{ width:138px; height:138px; }
   #dash-character-grid.card-style .character .name{ opacity:1; transform:none; color:var(--noir); font-size:14.5px; margin-top:2px; text-align:center; line-height:1.2; }
   #dash-character-grid.card-style .character .you-badge{ display:block; font-size:10px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--terracotta-deep); }
   .recs-feed{ display:flex; flex-direction:column; gap:4px; background:var(--white-soft); border-radius:16px; padding:14px 16px 8px; margin-bottom:6px; max-height:420px; overflow-y:auto; }
@@ -219,7 +216,6 @@
   .fiche-card{ position:relative; z-index:2; margin:auto; background:var(--white-soft); border-radius:26px; max-width:440px; width:100%; padding:34px 32px 28px; text-align:center; box-shadow:0 30px 60px rgba(0,0,0,.35); transform:scale(.92) translateY(16px); opacity:0; transition:transform .45s var(--ease), opacity .45s var(--ease); }
   .modal-overlay.active .fiche-card{ transform:scale(1) translateY(0); opacity:1; }
   .fiche-card img{ width:100px; margin-bottom:8px; filter:drop-shadow(0 10px 16px rgba(0,0,0,.18)); }
-  .fiche-card img.char-large{ width:150px; }
   .fiche-card .fiche-name{ font-size:21px; margin-bottom:2px; }
   .fiche-card .fiche-tag{ font-size:11.5px; color:var(--lagon); font-weight:600; letter-spacing:.06em; text-transform:uppercase; margin-bottom:20px; }
   .fiche-row{ text-align:left; display:flex; gap:14px; align-items:flex-start; padding:13px 0; border-top:1px solid rgba(33,28,22,0.08); }
@@ -354,7 +350,6 @@
     .content-card{ padding:30px 20px 26px; }
     .quiz-page-wrap{ padding:28px 18px 22px; }
     .character img{ width:104px; }
-    .character img.char-large{ width:156px; }
 
     /* Titre "La Commando" plus discret sur mobile */
     .commando-hero{ margin:22px 0 18px; }
@@ -376,7 +371,6 @@
       box-shadow:0 6px 14px rgba(0,0,0,.14);
     }
     #dash-character-grid.card-style .character img{ width:58px; height:58px; }
-    #dash-character-grid.card-style .character img.char-large{ width:87px; height:87px; }
     #dash-character-grid.card-style .character .name{ font-size:11.5px; }
     #dash-character-grid.card-style .character .you-badge{ font-size:8.5px; }
 
@@ -413,7 +407,6 @@
   @media (max-width:400px){
     .login-card h1{ font-size:22px; }
     .character img{ width:88px; }
-    .character img.char-large{ width:132px; }
     .commando-title{ font-size:25px; }
   }
   @media (prefers-reduced-motion: reduce){
