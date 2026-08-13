@@ -339,23 +339,27 @@ const loginError = document.getElementById('login-error');
 // (et remplit currentRoomId / currentRoomAdminPassword), false sinon.
 async function resolveRoomFromCode(code){
   if(typeof firebaseReady === 'undefined' || !firebaseReady || !db){
-    if(code.toUpperCase() !== DEMO_ACCESS_CODE) return false;
+    if(code.toUpperCase() !== DEMO_ACCESS_CODE) return {found:false};
     currentRoomId = 'demo';
     currentRoomAdminPassword = DEMO_ADMIN_PASSWORD;
     currentRoomName = 'Démo';
-    return true;
+    return {found:true};
   }
   try{
-    const snap = await db.collection('rooms').where('accessCode','==', code).limit(1).get();
-    if(snap.empty) return false;
-    const roomDoc = snap.docs[0];
+    const attempts = [code, code.toUpperCase(), code.toLowerCase()];
+    let roomDoc = null;
+    for(const attempt of attempts){
+      const snap = await db.collection('rooms').where('accessCode','==', attempt).limit(1).get();
+      if(!snap.empty){ roomDoc = snap.docs[0]; break; }
+    }
+    if(!roomDoc) return {found:false};
     currentRoomId = roomDoc.id;
     currentRoomAdminPassword = roomDoc.data().adminPassword;
     currentRoomName = roomDoc.data().name || roomDoc.id;
-    return true;
+    return {found:true};
   }catch(err){
     console.warn('Recherche de salle impossible :', err);
-    return false;
+    return {found:false, error: (err && err.code) ? err.code : String(err)};
   }
 }
 
@@ -369,10 +373,12 @@ loginForm.addEventListener('submit', async (e)=>{
   }
   const submitBtn = loginForm.querySelector('button[type="submit"]');
   submitBtn.disabled = true;
-  const found = await resolveRoomFromCode(code);
+  const result = await resolveRoomFromCode(code);
   submitBtn.disabled = false;
-  if(!found){
-    loginError.textContent = "Ce code ne correspond à aucune invitation — essaie encore.";
+  if(!result.found){
+    loginError.textContent = result.error
+      ? `Ce code ne correspond à aucune invitation — essaie encore. (détail technique : ${result.error})`
+      : "Ce code ne correspond à aucune invitation — essaie encore.";
     loginError.classList.add('show');
     return;
   }
@@ -1354,9 +1360,11 @@ document.getElementById('open-admin').addEventListener('click', async (e)=>{
     loginError.classList.add('show');
     return;
   }
-  const found = await resolveRoomFromCode(code);
-  if(!found){
-    loginError.textContent = "Ce code ne correspond à aucune salle.";
+  const result = await resolveRoomFromCode(code);
+  if(!result.found){
+    loginError.textContent = result.error
+      ? `Ce code ne correspond à aucune salle. (détail technique : ${result.error})`
+      : "Ce code ne correspond à aucune salle.";
     loginError.classList.add('show');
     return;
   }
