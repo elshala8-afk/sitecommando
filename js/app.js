@@ -48,12 +48,17 @@ const NEEDS = [
   {id:'other', label:'Autre', icon:'other'}
 ];
 const CHARACTERS = [
-  {id:'258', name:'Poisson-Lune',   asset:'char_258'},
-  {id:'259', name:'Petit Soleil',   asset:'char_259'},
-  {id:'260', name:'Mousse',         asset:'char_260'},
-  {id:'262', name:'Câline',         asset:'char_262'},
-  {id:'263', name:'Le Justicier',   asset:'char_263'},
-  {id:'264', name:'Boucles',        asset:'char_264'}
+  {id:'258', name:'Poisson-Lune',   asset:'char_258', active:true},
+  {id:'259', name:'Petit Soleil',   asset:'char_259', active:true},
+  {id:'260', name:'Mousse',         asset:'char_260', active:true},
+  {id:'262', name:'Câline',         asset:'char_262', active:true},
+  {id:'263', name:'Le Justicier',   asset:'char_263', active:true},
+  {id:'264', name:'Boucles',        asset:'char_264', active:true},
+  {id:'265', name:'Zen',            asset:'char_265', active:true},
+  {id:'266', name:'Grand Sourire',  asset:'char_266', active:true},
+  {id:'267', name:'Gourmand',       asset:'char_267', active:true},
+  {id:'268', name:'Libellule',      asset:'char_268', active:true},
+  {id:'269', name:'Fraise',         asset:'char_269', active:true}
 ];
 
 const MOCK_ANSWERS = {
@@ -123,14 +128,32 @@ function watchMonthlyConfig(){
     if(d.lettreQuote) monthlyConfig.lettreQuote = d.lettreQuote;
     monthlyConfig.lettreLinkText = d.lettreLinkText || null;
     monthlyConfig.lettreLinkUrl = d.lettreLinkUrl || null;
+    let needsRefresh = false;
     if(d.characterNames){
       monthlyConfig.characterNames = d.characterNames;
       Object.entries(d.characterNames).forEach(([id,name])=>{
         const c = CHARACTERS.find(ch=>ch.id===id);
         if(c && name) c.name = name;
       });
-      refreshCharacterNameDisplays();
+      needsRefresh = true;
     }
+    if(d.characterActive){
+      monthlyConfig.characterActive = d.characterActive;
+      Object.entries(d.characterActive).forEach(([id,isActive])=>{
+        const c = CHARACTERS.find(ch=>ch.id===id);
+        if(c) c.active = isActive;
+      });
+      needsRefresh = true;
+    }
+    if(d.characterDeleted){
+      monthlyConfig.characterDeleted = d.characterDeleted;
+      Object.entries(d.characterDeleted).forEach(([id,isDeleted])=>{
+        const c = CHARACTERS.find(ch=>ch.id===id);
+        if(c && isDeleted) c.deleted = true;
+      });
+      needsRefresh = true;
+    }
+    if(needsRefresh) refreshCharacterNameDisplays();
   }, err=>{ console.warn('Lecture Firestore (config) impossible :', err); });
 }
 function saveMonthlyConfigToCloud(){
@@ -142,6 +165,8 @@ function saveMonthlyConfigToCloud(){
     lettreLinkText: monthlyConfig.lettreLinkText || null,
     lettreLinkUrl: monthlyConfig.lettreLinkUrl || null,
     characterNames: monthlyConfig.characterNames || {},
+    characterActive: monthlyConfig.characterActive || {},
+    characterDeleted: monthlyConfig.characterDeleted || {},
     adminKey: ADMIN_PASSWORD // doit correspondre à la règle Firestore (voir firestore.rules)
   }, {merge:true}).catch(err=> console.warn("Impossible d'enregistrer la config dans Firebase :", err));
 }
@@ -254,7 +279,20 @@ function initBgCycle(containerId, offset, interval){
   ['bgcycle-dashboard',4], ['bgcycle-fiches',0], ['bgcycle-fiche-detail',1], ['bgcycle-binome',2], ['bgcycle-recs',3],
   ['bgcycle-crea',3], ['bgcycle-jouer',4], ['bgcycle-lettre',0], ['bgcycle-love',1], ['bgcycle-playlist',2],
   ['bgcycle-admin-gate',3], ['bgcycle-admin',4]
-].forEach(([id,offset],i)=> initBgCycle(id, offset, 8600 + i*160));
+].forEach(([id,offset],i)=>{
+  if(id === 'bgcycle-login'){
+    // Le fond de l'écran de connexion doit être visible tout de suite.
+    initBgCycle(id, offset, 8600 + i*160);
+  } else {
+    // Tous les autres fonds ne sont pas visibles au premier chargement —
+    // on les charge un peu après, pour ne pas ralentir l'arrivée sur le site.
+    // requestIdleCallback attend que le navigateur soit tranquille ; sur les
+    // navigateurs qui ne le supportent pas (Safari), on utilise un délai.
+    const start = () => initBgCycle(id, offset, 8600 + i*160);
+    if('requestIdleCallback' in window){ requestIdleCallback(start, {timeout: 4000}); }
+    else { setTimeout(start, 1200 + i*150); }
+  }
+});
 
 /* ---------- navigation ---------- */
 function goToScreen(id){
@@ -285,20 +323,27 @@ loginForm.addEventListener('submit', (e)=>{
   }
   loginError.classList.remove('show');
   if(tryRestoreSession()) return; // tu avais déjà rejoint : direct sur ton dashboard
+  buildCharacterGrid(); // les images des personnages ne se chargent qu'à ce moment-là
   goToScreen('screen-select');
 });
 
 /* ============ CHOIX DU PERSONNAGE ============ */
 const characterGrid = document.getElementById('character-grid');
-CHARACTERS.forEach(c=>{
-  const btn = document.createElement('button');
-  btn.className = 'character';
-  btn.type = 'button';
-  btn.dataset.id = c.id;
-  btn.innerHTML = `<img src="${ASSETS[c.asset]}" alt="${c.name}"><span class="name">${c.name}</span>`;
-  btn.addEventListener('click', ()=> chooseCharacter(c));
-  characterGrid.appendChild(btn);
-});
+let characterGridBuilt = false;
+function buildCharacterGrid(){
+  characterGridBuilt = true;
+  characterGrid.innerHTML = '';
+  CHARACTERS.forEach(c=>{
+    if(c.deleted || c.active === false) return;
+    const btn = document.createElement('button');
+    btn.className = 'character';
+    btn.type = 'button';
+    btn.dataset.id = c.id;
+    btn.innerHTML = `<img src="${ASSETS[c.asset]}" alt="${c.name}"><span class="name">${c.name}</span>`;
+    btn.addEventListener('click', ()=> chooseCharacter(c));
+    characterGrid.appendChild(btn);
+  });
+}
 function updateCharacterAvailability(){
   if(typeof firebaseReady === 'undefined' || !firebaseReady || !db) return; // en mode démo, tous les personnages restent proposés
   document.querySelectorAll('#character-grid .character').forEach(btn=>{
@@ -359,6 +404,7 @@ document.getElementById('letter-continue').addEventListener('click', async ()=>{
 
   state.participantName = name;
   document.getElementById('love-name').value = state.participantName;
+  document.getElementById('quiz-submit').textContent = 'Rejoindre la Commando →';
   closeModal('modal-letter');
   goToScreen('screen-quiz');
 });
@@ -430,6 +476,7 @@ document.getElementById('signin-submit').addEventListener('click', async ()=>{
       if(attempts < 12){ setTimeout(tryFind, 300); }
       else {
         alert("Tu es connecté·e, mais on ne retrouve pas encore ton profil rempli — réessaie dans un instant, ou recommence le questionnaire si besoin.");
+        if(!characterGridBuilt) buildCharacterGrid();
         goToScreen('screen-select');
       }
     };
@@ -533,6 +580,40 @@ function buildNeedGrid(){
   otherField.addEventListener('input', ()=>{ state.quizAnswers.needOther = otherField.value; });
 }
 buildMoodGrid(); buildNoteRow(); buildShareGrid(); buildNeedGrid();
+
+/* ============ MODIFIER MES RÉPONSES (fiche modifiable) ============ */
+function prefillQuizForm(){
+  const qa = state.quizAnswers;
+  document.querySelectorAll('#mood-options .option').forEach(opt=>{
+    opt.classList.toggle('picked', opt.dataset.id === qa.mood);
+  });
+  document.querySelectorAll('#note-options .note-btn').forEach(btn=>{
+    btn.classList.toggle('picked', parseInt(btn.textContent, 10) === qa.note);
+  });
+  document.getElementById('song-of-month').value = qa.song || '';
+  document.querySelectorAll('#share-options .option').forEach(opt=>{
+    opt.classList.toggle('picked', qa.share.includes(opt.dataset.id));
+  });
+  syncShareDetails();
+  Object.entries(qa.shareDetails || {}).forEach(([key,val])=>{
+    const input = document.querySelector(`#share-details [data-key="${key}"] input`);
+    if(input) input.value = val;
+  });
+  document.querySelectorAll('#need-options .option').forEach(opt=>{
+    opt.classList.toggle('picked', qa.need.includes(opt.dataset.id));
+  });
+  const otherField = document.getElementById('need-other-field');
+  const hasOther = qa.need.includes('other');
+  otherField.style.display = hasOther ? 'block' : 'none';
+  otherField.value = qa.needOther || '';
+  document.getElementById('anecdote-text').value = qa.anecdote || '';
+  document.getElementById('events-text').value = qa.events || '';
+}
+document.getElementById('edit-answers').addEventListener('click', ()=>{
+  prefillQuizForm();
+  document.getElementById('quiz-submit').textContent = 'Enregistrer mes changements →';
+  goToScreen('screen-quiz');
+});
 // Ces trois appels sont protégés : si js/firebase-config.js contient une erreur
 // (ex. une virgule ou un guillemet oublié en collant ta config), le reste du
 // site continue de fonctionner normalement au lieu de se bloquer entièrement.
@@ -1167,26 +1248,12 @@ imitationInput.addEventListener('change', ()=>{
   reader.readAsDataURL(file);
 });
 
-/* ============ LA LETTRE DU MOIS ============ */
-const LETTRES_DU_MOIS = [
-  { body:"L'été a ce pouvoir bizarre de remettre les amitiés à l'heure. On se voit plus, on se parle plus tard le soir, on redevient un peu les ados qu'on était. Georges Brassens a écrit, dans « Les Copains d'abord », l'hymne ultime de l'amitié increvable, celle qui tient bon même quand tout le reste change de cap. Cette Commando, c'est un peu ça — un bateau qu'on garde à flot ensemble, sans trop se demander pourquoi.",
-    quote:"Il y a des amitiés qu'aucune tempête ne fait couler." },
-  { body:"On a lu quelque chose d'intéressant ce mois-ci, dans la newsletter Friendship Explained d'Anna Goldfarb : elle rappelle qu'une amitié adulte, ça se cultive comme un jardin, pas comme un compte en banque — ça ne se mesure pas en fréquence, mais en attention. L'été est le meilleur moment de l'année pour ça : plus de temps, moins d'excuses. Alors cette semaine, arrosez un peu votre jardin.",
-    quote:"Une amitié qu'on arrose de temps en temps reste verte toute l'année." },
-  { body:"Il y a des étés qu'on n'oublie pas, pas à cause d'un lieu ou d'une date, mais à cause des gens avec qui on les a traversés. Cette Commando existe pour ça : se donner une excuse, chaque mois, de se rappeler qu'on compte les uns pour les autres. Rien de grandiose — juste un mot, un jeu, une photo, un petit signe de vie.",
-    quote:"On ne se souvient pas des étés, on se souvient de qui les a rendus doux." }
-];
+/* ============ LA PILLS DU MOIS ============ */
 const MOIS_FR = ['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
 document.getElementById('open-lettre').addEventListener('click', ()=>{
-  let body, quote;
-  if(monthlyConfig.lettreBody){
-    body = monthlyConfig.lettreBody;
-    quote = monthlyConfig.lettreQuote || '';
-  } else {
-    const pick = LETTRES_DU_MOIS[new Date().getMonth() % LETTRES_DU_MOIS.length];
-    body = pick.body; quote = pick.quote;
-  }
-  document.getElementById('lettre-title').textContent = `Lettre de ${MOIS_FR[new Date().getMonth()]}`;
+  const body = monthlyConfig.lettreBody || "Personne n'a encore écrit la Pills de ce mois-ci — l'admin peut l'ajouter depuis le Mode admin.";
+  const quote = monthlyConfig.lettreQuote || '';
+  document.getElementById('lettre-title').textContent = monthlyConfig.lettreBody ? `Pills de ${MOIS_FR[new Date().getMonth()]}` : 'À venir';
   document.getElementById('lettre-body').textContent = body;
   document.getElementById('lettre-quote').textContent = quote ? '« ' + quote + ' »' : '';
   const linkWrap = document.getElementById('lettre-link-wrap');
@@ -1244,10 +1311,27 @@ function buildAdminCharactersList(){
   const wrap = document.getElementById('admin-characters-list');
   wrap.innerHTML = '';
   CHARACTERS.forEach(c=>{
+    if(c.deleted) return;
     const row = document.createElement('div');
     row.className = 'admin-char-row';
-    row.innerHTML = `<img src="${ASSETS[c.asset]}" alt=""><input type="text" data-char-id="${c.id}" value="${c.name}">`;
+    row.innerHTML = `
+      <img src="${ASSETS[c.asset]}" alt="">
+      <input type="text" data-char-id="${c.id}" value="${c.name}">
+      <label class="admin-char-active"><input type="checkbox" data-active-id="${c.id}" ${c.active !== false ? 'checked' : ''}> Actif</label>
+      <button type="button" class="admin-char-delete" data-delete-id="${c.id}" title="Supprimer ce personnage">🗑</button>
+    `;
     wrap.appendChild(row);
+  });
+  wrap.querySelectorAll('.admin-char-delete').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const id = btn.dataset.deleteId;
+      const c = CHARACTERS.find(ch=>ch.id===id);
+      if(!c) return;
+      if(!confirm(`Supprimer "${c.name}" ? Il ne sera plus proposé aux nouveaux participants (ses données déjà envoyées restent visibles).`)) return;
+      c.deleted = true;
+      c.active = false;
+      buildAdminCharactersList();
+    });
   });
 }
 function refreshCharacterNameDisplays(){
@@ -1258,6 +1342,7 @@ function refreshCharacterNameDisplays(){
       if(c) btn.querySelector('.name').textContent = c.name;
     });
   }
+  if(characterGridBuilt) buildCharacterGrid();
   if(document.getElementById('screen-dashboard')?.classList.contains('active')){
     buildDashCharacterGrid();
   }
@@ -1279,7 +1364,9 @@ document.getElementById('admin-save').addEventListener('click', ()=>{
   monthlyConfig.lettreLinkUrl = document.getElementById('admin-lettre-link-url').value.trim();
 
   const characterNames = {};
-  document.querySelectorAll('#admin-characters-list input').forEach(input=>{
+  const characterActive = {};
+  const characterDeleted = {};
+  document.querySelectorAll('#admin-characters-list input[data-char-id]').forEach(input=>{
     const id = input.dataset.charId;
     const newName = input.value.trim();
     if(newName){
@@ -1288,13 +1375,73 @@ document.getElementById('admin-save').addEventListener('click', ()=>{
       if(c) c.name = newName;
     }
   });
+  document.querySelectorAll('#admin-characters-list input[data-active-id]').forEach(input=>{
+    const id = input.dataset.activeId;
+    characterActive[id] = input.checked;
+    const c = CHARACTERS.find(ch=>ch.id === id);
+    if(c) c.active = input.checked;
+  });
+  CHARACTERS.forEach(c=>{ if(c.deleted) characterDeleted[c.id] = true; });
+
   monthlyConfig.characterNames = characterNames;
+  monthlyConfig.characterActive = characterActive;
+  monthlyConfig.characterDeleted = characterDeleted;
   refreshCharacterNameDisplays();
 
   if(typeof saveMonthlyConfigToCloud === 'function') saveMonthlyConfigToCloud();
   const confirmEl = document.getElementById('admin-save-confirm');
   confirmEl.classList.add('show');
   setTimeout(()=> confirmEl.classList.remove('show'), 2500);
+});
+
+/* ============ ARCHIVER LE MOIS ET REPARTIR À ZÉRO ============ */
+document.getElementById('admin-archive-reset').addEventListener('click', async ()=>{
+  const note = document.getElementById('admin-archive-note');
+  note.textContent = '';
+  if(typeof firebaseReady === 'undefined' || !firebaseReady || !db){
+    note.textContent = "Cette fonction a besoin de Firebase — en mode démo locale, il n'y a rien à archiver (rien n'est partagé de toute façon).";
+    return;
+  }
+  if(!confirm("Archiver les réponses de ce mois-ci et repartir à zéro pour toute la Commando ?\n\nRien n'est perdu — tout reste consultable dans Firebase, dans la collection \"archives\".\n\nCette action est immédiate et ne peut pas être annulée depuis l'app.")) return;
+
+  const btn = document.getElementById('admin-archive-reset');
+  btn.disabled = true;
+  note.textContent = 'Archivage en cours…';
+  try{
+    const monthTag = currentMonthTag();
+    const [participantsSnap, messagesSnap] = await Promise.all([
+      db.collection('participants').where('month','==', monthTag).get(),
+      db.collection('messages').where('month','==', monthTag).get()
+    ]);
+    const participantsData = participantsSnap.docs.map(d=> d.data());
+    const messagesData = messagesSnap.docs.map(d=> d.data());
+
+    await db.collection('archives').doc(`${monthTag}_${Date.now()}`).set({
+      month: monthTag,
+      participants: participantsData,
+      messages: messagesData,
+      archivedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      adminKey: ADMIN_PASSWORD
+    });
+
+    const batch = db.batch();
+    participantsSnap.docs.forEach(doc=> batch.delete(doc.ref));
+    messagesSnap.docs.forEach(doc=> batch.delete(doc.ref));
+    await batch.commit();
+
+    sharedParticipants = {};
+    cloudMessagesCache = [];
+    refreshLiveViews();
+
+    const confirmEl = document.getElementById('admin-archive-confirm');
+    confirmEl.classList.add('show');
+    setTimeout(()=> confirmEl.classList.remove('show'), 3000);
+    note.textContent = `${participantsData.length} réponse(s) et ${messagesData.length} message(s) archivés.`;
+  }catch(err){
+    console.warn("Impossible d'archiver le mois :", err);
+    note.textContent = "Une erreur est survenue pendant l'archivage — vérifie que les règles Firestore sont bien à jour.";
+  }
+  btn.disabled = false;
 });
 
 /* ============ LA LOVE RUBRIQUE ============ */
