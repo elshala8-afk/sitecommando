@@ -558,6 +558,7 @@ async function tryRestoreSession(){
   return true;
 }
 document.getElementById('open-signin').addEventListener('click', ()=>{
+  document.getElementById('signin-room-code').value = accessInput.value.trim(); // pré-rempli si déjà tapé
   document.getElementById('signin-name').value = '';
   document.getElementById('signin-password').value = '';
   document.getElementById('signin-error').classList.remove('show');
@@ -565,28 +566,24 @@ document.getElementById('open-signin').addEventListener('click', ()=>{
 });
 document.getElementById('signin-close').addEventListener('click', ()=> closeModal('modal-signin'));
 document.getElementById('signin-submit').addEventListener('click', async ()=>{
+  const code = document.getElementById('signin-room-code').value.trim();
   const name = document.getElementById('signin-name').value.trim();
   const password = document.getElementById('signin-password').value;
   const errorEl = document.getElementById('signin-error');
   errorEl.classList.remove('show');
-  if(!name || !password){
-    errorEl.textContent = 'Renseigne ton prénom et ton mot de passe.';
+  if(!code || !name || !password){
+    errorEl.textContent = 'Renseigne le code de ta salle, ton prénom et ton mot de passe.';
     errorEl.classList.add('show');
     return;
   }
-  const code = accessInput.value.trim();
-  if(code.length === 0){
-    errorEl.textContent = "Tape d'abord le code d'accès de ta salle, dans le champ juste en dessous (ferme cette fenêtre pour y accéder).";
+  const submitBtn = document.getElementById('signin-submit');
+  submitBtn.disabled = true;
+  const foundRoom = await resolveRoomFromCode(code);
+  submitBtn.disabled = false;
+  if(!foundRoom.found){
+    errorEl.textContent = "Ce code ne correspond à aucune salle — vérifie-le avant de te reconnecter.";
     errorEl.classList.add('show');
     return;
-  }
-  if(!currentRoomId){
-    const foundRoom = await resolveRoomFromCode(code);
-    if(!foundRoom.found){
-      errorEl.textContent = "Ce code ne correspond à aucune salle — vérifie-le avant de te reconnecter.";
-      errorEl.classList.add('show');
-      return;
-    }
   }
   if(typeof authReady === 'undefined' || !authReady){
     errorEl.textContent = "La connexion par mot de passe n'est pas disponible en mode démo local.";
