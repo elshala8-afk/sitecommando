@@ -1467,6 +1467,7 @@ function refreshCharacterNameDisplays(){
     });
   }
   if(characterGridBuilt) buildCharacterGrid();
+  updateCharacterAvailability();
   if(document.getElementById('screen-dashboard')?.classList.contains('active')){
     buildDashCharacterGrid();
   }
