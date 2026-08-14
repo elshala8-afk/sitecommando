@@ -419,13 +419,8 @@ function buildCharacterGrid(){
   });
 }
 function updateCharacterAvailability(){
-  const dbg = document.getElementById('debug-room-info');
   const allButtons = document.querySelectorAll('#character-grid .character');
-  if(dbg){
-    dbg.textContent = `[diagnostic] salle=${currentRoomId || 'aucune'} · firebaseReady=${typeof firebaseReady!=='undefined'?firebaseReady:'undef'} · mois=${currentMonthTag()} · personnages reçus=${Object.keys(sharedParticipants).join(',') || 'aucun'} · boutons dans la page=${allButtons.length}`;
-  }
   if(typeof firebaseReady === 'undefined' || !firebaseReady || !db) return; // en mode démo, tous les personnages restent proposés
-  let appliedCount = 0;
   allButtons.forEach(btn=>{
     try{
       const id = btn.dataset.id;
@@ -439,7 +434,6 @@ function updateCharacterAvailability(){
         btn.style.setProperty('opacity', '0.4', 'important');
         btn.style.setProperty('filter', 'grayscale(0.8)', 'important');
         btn.style.setProperty('pointer-events', 'none', 'important');
-        appliedCount++;
       } else {
         btn.style.removeProperty('opacity');
         btn.style.removeProperty('filter');
@@ -449,7 +443,6 @@ function updateCharacterAvailability(){
       if(nameEl && c) nameEl.textContent = taken ? `${c.name} · pris` : c.name;
     }catch(e){ console.warn('updateCharacterAvailability, personnage', btn.dataset.id, ':', e); }
   });
-  if(dbg) dbg.textContent += ` · style forcé appliqué à ${appliedCount} personnage(s)`;
 }
 function chooseCharacter(c){
   if(sharedParticipants[c.id]) return; // déjà pris — les personnes déjà inscrites utilisent "Retrouver mon espace"
