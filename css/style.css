@@ -55,6 +55,14 @@
   .admin-char-delete{ background:none; border:1.5px solid rgba(33,28,22,0.12); border-radius:10px; width:36px; height:36px; font-size:15px; flex-shrink:0; opacity:.7; }
   .admin-char-delete:hover{ opacity:1; border-color:var(--terracotta); }
   .error-msg{ font-size:13px; color:#a23b1f; min-height:18px; margin:-4px 0 10px; opacity:0; transition:opacity .2s; }
+  .souvenir-confirm{
+    display:flex; align-items:center; gap:8px; justify-content:center;
+    font-family:'Work Sans'; font-weight:600; font-size:14px; color:var(--lagon-deep);
+    background:rgba(45,139,142,0.12); border-radius:100px; padding:11px 20px;
+    margin-top:14px; opacity:0; transform:translateY(6px);
+    pointer-events:none; transition:opacity .3s ease, transform .3s ease;
+  }
+  .souvenir-confirm.show{ opacity:1; transform:translateY(0); }
   .error-msg.show{ opacity:1; }
 
   .select-wrap{ width:100%; max-width:1180px; text-align:center; }
