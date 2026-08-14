@@ -390,7 +390,7 @@ loginForm.addEventListener('submit', async (e)=>{
   // Une fois la salle connue, on s'assure que les données affichées lui
   // correspondent (les écouteurs Firestore sont ré-attachés pour cette salle).
   attachRoomListeners();
-  if(tryRestoreSession()) return; // tu avais déjà rejoint : direct sur ton dashboard
+  if(await tryRestoreSession()) return; // tu avais déjà rejoint : direct sur ton dashboard
   buildCharacterGrid(); // les images des personnages ne se chargent qu'à ce moment-là
   updateCharacterAvailability();
   goToScreen('screen-select');
@@ -523,10 +523,30 @@ function findOwnParticipant(uid){
   }
   return null;
 }
-function tryRestoreSession(){
+// Vérification directe (une seule requête, sans dépendre de l'écoute en
+// direct) — utile en dernier recours si la connexion est lente et que les
+// données n'ont pas encore eu le temps d'arriver via l'écoute habituelle.
+async function findOwnParticipantDirect(uid){
+  if(typeof firebaseReady === 'undefined' || !firebaseReady || !db || !currentRoomId) return null;
+  try{
+    const snap = await db.collection('participants').where('ownerId','==', uid).get();
+    const monthTag = currentMonthTag();
+    let best = null;
+    snap.forEach(doc=>{
+      const d = doc.data();
+      if(d.roomId !== currentRoomId || d.month !== monthTag) return;
+      if(!best || (d.timestamp && best.timestamp && d.timestamp.toMillis() > best.timestamp.toMillis())){
+        best = d;
+      }
+    });
+    return best ? { charId: best.characterId, data: best } : null;
+  }catch(e){ console.warn('findOwnParticipantDirect :', e); return null; }
+}
+async function tryRestoreSession(){
   const uid = getCurrentUid();
   if(!uid) return false;
-  const found = findOwnParticipant(uid);
+  let found = findOwnParticipant(uid);
+  if(!found) found = await findOwnParticipantDirect(uid);
   if(!found) return false;
   const c = CHARACTERS.find(ch => ch.id === found.charId);
   if(!c) return false;
@@ -554,6 +574,20 @@ document.getElementById('signin-submit').addEventListener('click', async ()=>{
     errorEl.classList.add('show');
     return;
   }
+  const code = accessInput.value.trim();
+  if(code.length === 0){
+    errorEl.textContent = "Tape d'abord le code d'accès de ta salle, dans le champ juste en dessous (ferme cette fenêtre pour y accéder).";
+    errorEl.classList.add('show');
+    return;
+  }
+  if(!currentRoomId){
+    const foundRoom = await resolveRoomFromCode(code);
+    if(!foundRoom.found){
+      errorEl.textContent = "Ce code ne correspond à aucune salle — vérifie-le avant de te reconnecter.";
+      errorEl.classList.add('show');
+      return;
+    }
+  }
   if(typeof authReady === 'undefined' || !authReady){
     errorEl.textContent = "La connexion par mot de passe n'est pas disponible en mode démo local.";
     errorEl.classList.add('show');
@@ -561,9 +595,10 @@ document.getElementById('signin-submit').addEventListener('click', async ()=>{
   }
   try{
     const cred = await auth.signInWithEmailAndPassword(fakeEmailFor(name), password);
+    attachRoomListeners();
     closeModal('modal-signin');
     let attempts = 0;
-    const tryFind = () => {
+    const tryFind = async () => {
       const found = findOwnParticipant(cred.user.uid);
       if(found){
         const c = CHARACTERS.find(ch => ch.id === found.charId);
@@ -579,6 +614,21 @@ document.getElementById('signin-submit').addEventListener('click', async ()=>{
       attempts++;
       if(attempts < 12){ setTimeout(tryFind, 300); }
       else {
+        // Dernier recours : une vraie requête Firestore directe, au cas où
+        // l'écoute en direct n'aurait pas encore reçu les données (connexion
+        // lente) — plus fiable que d'abandonner après seulement 3,6 secondes.
+        const directFound = await findOwnParticipantDirect(cred.user.uid);
+        if(directFound){
+          const c = CHARACTERS.find(ch => ch.id === directFound.charId);
+          if(c){
+            state.selectedCharacter = c;
+            state.participantName = directFound.data.name;
+            document.getElementById('love-name').value = directFound.data.name;
+            initDashboard();
+            goToScreen('screen-dashboard');
+            return;
+          }
+        }
         alert("Tu es connecté·e ! Tu n'as pas encore répondu pour ce mois-ci — choisis ton personnage pour rejoindre.");
         if(!characterGridBuilt) buildCharacterGrid();
         goToScreen('screen-select');
