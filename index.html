@@ -25,7 +25,6 @@
       <p class="error-msg" id="login-error">Un petit code, et on t'ouvre la porte.</p>
       <button type="submit" class="btn btn-primary">Entrer</button>
       <button type="button" class="admin-link" id="open-signin" style="margin-top:12px;">Déjà inscrit·e ? Retrouver mon espace</button>
-      <p class="hint">Astuce pour découvrir la démo : code <strong>ETE2026</strong></p>
       <button type="button" class="admin-link" id="open-admin">Mode admin</button>
     </form>
   </div>
@@ -42,7 +41,7 @@
     <p>Entre le code de ta salle, ton prénom et le mot de passe que tu avais choisi — même depuis un autre appareil, tu retrouveras tes réponses.</p>
     <div class="letter-name-field">
       <label for="signin-room-code">Code d'accès de la salle</label>
-      <input type="text" id="signin-room-code" placeholder="Ton code d'accès" autocomplete="off">
+      <input type="text" id="signin-room-code" placeholder="Ton code d'accès" autocomplete="off" style="text-transform:uppercase;" oninput="this.value = this.value.toUpperCase();">
     </div>
     <div class="letter-name-field">
       <label for="signin-name">Ton prénom</label>
