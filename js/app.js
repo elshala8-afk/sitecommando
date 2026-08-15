@@ -558,7 +558,7 @@ async function tryRestoreSession(){
   return true;
 }
 document.getElementById('open-signin').addEventListener('click', ()=>{
-  document.getElementById('signin-room-code').value = accessInput.value.trim(); // pré-rempli si déjà tapé
+  document.getElementById('signin-room-code').value = accessInput.value.trim().toUpperCase(); // pré-rempli si déjà tapé
   document.getElementById('signin-name').value = '';
   document.getElementById('signin-password').value = '';
   document.getElementById('signin-error').classList.remove('show');
