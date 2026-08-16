@@ -93,7 +93,7 @@ function assetForCharacterId(id){
   const c = CHARACTERS.find(ch=>ch.id===id);
   return c ? c.asset : 'char_258';
 }
-let participantsUnsub = null, messagesUnsub = null, configUnsub = null;
+let participantsUnsub = null, messagesUnsub = null, configUnsub = null, challengeUnsub = null;
 function attachRoomListeners(){
   if(typeof firebaseReady === 'undefined' || !firebaseReady || !db || !currentRoomId) return;
   // On coupe d'éventuels écouteurs d'une salle précédente (changement de salle
@@ -101,9 +101,11 @@ function attachRoomListeners(){
   if(participantsUnsub) participantsUnsub();
   if(messagesUnsub) messagesUnsub();
   if(configUnsub) configUnsub();
+  if(challengeUnsub) challengeUnsub();
   participantsUnsub = watchParticipants();
   messagesUnsub = watchMessages();
   configUnsub = watchMonthlyConfig();
+  challengeUnsub = watchChallengeParticipants();
 }
 function watchParticipants(){
   if(typeof firebaseReady === 'undefined' || !firebaseReady || !db || !currentRoomId) return null;
@@ -1078,9 +1080,75 @@ function applyCreaToModal(){
 }
 document.getElementById('open-crea').addEventListener('click', ()=>{
   applyCreaToModal();
+  refreshCreaJoinUI();
   openModal('modal-crea');
 });
 document.getElementById('crea-close').addEventListener('click', ()=> closeModal('modal-crea'));
+
+/* ============ JE PARTICIPE AU DÉFI CRÉATIF ============ */
+let challengeParticipants = {}; // ownerId -> {name, timestamp}, pour le mois/salle en cours
+function watchChallengeParticipants(){
+  if(typeof firebaseReady === 'undefined' || !firebaseReady || !db || !currentRoomId) return null;
+  return db.collection('challengeParticipants')
+    .where('roomId','==', currentRoomId)
+    .onSnapshot(snapshot=>{
+      const monthTag = currentMonthTag();
+      const map = {};
+      snapshot.forEach(doc=>{
+        const d = doc.data();
+        if(d.month !== monthTag) return;
+        map[d.ownerId] = { name: d.name, timestamp: d.timestamp };
+      });
+      challengeParticipants = map;
+      refreshCreaJoinUI();
+    }, err=>{ console.warn('Lecture Firestore (challengeParticipants) impossible :', err); });
+}
+function refreshCreaJoinUI(){
+  const btn = document.getElementById('crea-join-btn');
+  const confirmEl = document.getElementById('crea-join-confirm');
+  const countEl = document.getElementById('crea-join-count');
+  if(!btn) return;
+  const uid = getCurrentUid();
+  const already = uid && challengeParticipants[uid];
+  const count = Object.keys(challengeParticipants).length;
+  if(already){
+    btn.textContent = '✓ Tu participes déjà';
+    btn.disabled = true;
+  } else {
+    btn.textContent = 'Je participe au défi →';
+    btn.disabled = false;
+  }
+  confirmEl.classList.remove('show');
+  countEl.textContent = count > 0
+    ? `${count} personne${count>1?'s':''} de la Commando participe${count>1?'nt':''} déjà 💪`
+    : '';
+}
+document.getElementById('crea-join-btn').addEventListener('click', async ()=>{
+  const uid = getCurrentUid();
+  if(typeof firebaseReady === 'undefined' || !firebaseReady || !db || !currentRoomId || !uid){
+    alert("Il faut être connecté·e pour confirmer ta participation — rejoins d'abord la Commando depuis l'écran de connexion.");
+    return;
+  }
+  const btn = document.getElementById('crea-join-btn');
+  btn.disabled = true;
+  try{
+    await db.collection('challengeParticipants').add({
+      roomId: currentRoomId,
+      ownerId: uid,
+      name: state.participantName || 'Quelqu\u2019un',
+      month: currentMonthTag(),
+      timestamp: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    challengeParticipants[uid] = { name: state.participantName, timestamp: null };
+    refreshCreaJoinUI();
+    const confirmEl = document.getElementById('crea-join-confirm');
+    confirmEl.classList.add('show');
+  }catch(err){
+    console.warn("Impossible d'enregistrer ta participation :", err);
+    btn.disabled = false;
+    alert("Une erreur est survenue, réessaie dans un instant.");
+  }
+});
 
 /* ============ VIENS ON JOUE ============ */
 document.getElementById('open-jouer').addEventListener('click', ()=>{
@@ -1601,20 +1669,24 @@ document.getElementById('admin-archive-reset').addEventListener('click', async (
   note.textContent = 'Archivage en cours…';
   try{
     const monthTag = currentMonthTag();
-    const [participantsAllSnap, messagesAllSnap] = await Promise.all([
+    const [participantsAllSnap, messagesAllSnap, challengeAllSnap] = await Promise.all([
       db.collection('participants').where('roomId','==', currentRoomId).get(),
-      db.collection('messages').where('roomId','==', currentRoomId).get()
+      db.collection('messages').where('roomId','==', currentRoomId).get(),
+      db.collection('challengeParticipants').where('roomId','==', currentRoomId).get()
     ]);
     const participantsDocs = participantsAllSnap.docs.filter(d=> d.data().month === monthTag);
     const messagesDocs = messagesAllSnap.docs.filter(d=> d.data().month === monthTag);
+    const challengeDocs = challengeAllSnap.docs.filter(d=> d.data().month === monthTag);
     const participantsData = participantsDocs.map(d=> d.data());
     const messagesData = messagesDocs.map(d=> d.data());
+    const challengeData = challengeDocs.map(d=> d.data());
 
     await db.collection('archives').doc(`${currentRoomId}_${monthTag}_${Date.now()}`).set({
       roomId: currentRoomId,
       month: monthTag,
       participants: participantsData,
       messages: messagesData,
+      challengeParticipants: challengeData,
       crea: monthlyConfig.crea || null,
       lettreBody: monthlyConfig.lettreBody || null,
       lettreQuote: monthlyConfig.lettreQuote || null,
@@ -1625,6 +1697,7 @@ document.getElementById('admin-archive-reset').addEventListener('click', async (
     const batch = db.batch();
     participantsDocs.forEach(doc=> batch.delete(doc.ref));
     messagesDocs.forEach(doc=> batch.delete(doc.ref));
+    challengeDocs.forEach(doc=> batch.delete(doc.ref));
     await batch.commit();
 
     // Nouveau mois = nouveau thème : on vide la créa et la lettre pour que
@@ -1638,7 +1711,9 @@ document.getElementById('admin-archive-reset').addEventListener('click', async (
 
     sharedParticipants = {};
     cloudMessagesCache = [];
+    challengeParticipants = {};
     refreshLiveViews();
+    refreshCreaJoinUI();
     if(document.getElementById('modal-admin').classList.contains('active')) openAdminPanel();
 
     const confirmEl = document.getElementById('admin-archive-confirm');
@@ -1742,8 +1817,11 @@ document.getElementById('love-send').addEventListener('click', ()=>{
   voicePreview.style.display = 'none';
   voicePreview.removeAttribute('src');
   voiceLabel.textContent = 'Enregistrer une note vocale';
-  voiceStatus.textContent = 'Message envoyé à la Commando 💛';
+  voiceStatus.textContent = '';
   recordedBlobUrl = null;
+  const confirmEl = document.getElementById('love-send-confirm');
+  confirmEl.classList.add('show');
+  setTimeout(()=> confirmEl.classList.remove('show'), 3000);
 });
 
 /* ============ MA MINIPLAYLIST COMMANDO ============ */
