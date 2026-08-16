@@ -253,6 +253,7 @@
     <img id="fiche-img" src="" alt="">
     <h3 class="fiche-name" id="fiche-name"></h3>
     <p class="fiche-tag" id="fiche-tag"></p>
+    <p class="fiche-challenge-badge" id="fiche-challenge-badge" style="display:none;">✓ Participe au défi créatif du mois</p>
     <div class="fiche-row">
       <svg id="fiche-mood-icon" viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></svg>
       <div><div class="fiche-label">Météo &amp; note</div><div class="fiche-value" id="fiche-mood-val"></div></div>
@@ -455,16 +456,8 @@
     </div>
 
     <div class="love-panel active" id="panel-send">
-      <p>Un mot d'amitié, un souvenir, un merci — à l'écrit ou en note vocale.</p>
+      <p>Un mot d'amitié, un souvenir, un merci.</p>
       <textarea class="love-textarea" id="love-text" placeholder="Écris ton petit mot ici..."></textarea>
-      <div class="voice-row">
-        <button class="btn-voice" id="voice-record" type="button">
-          <svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M9 21h6"/></svg>
-          <span id="voice-record-label">Enregistrer une note vocale</span>
-        </button>
-        <span class="voice-status" id="voice-status"></span>
-      </div>
-      <audio class="voice-preview" id="voice-preview" controls></audio>
       <div class="love-name-row"><span>De la part de</span><input type="text" id="love-name" placeholder="ton prénom"></div>
       <button class="btn btn-primary btn-send" id="love-send">Envoyer à la Commando →</button>
       <p class="souvenir-confirm" id="love-send-confirm">Message envoyé à la Commando 💛</p>
