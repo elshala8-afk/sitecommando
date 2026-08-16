@@ -782,19 +782,6 @@ document.getElementById('quiz-submit').addEventListener('click', ()=>{
   goToScreen('screen-dashboard');
 });
 
-/* ============ CHANGER D'IDENTITÉ (déconnexion) ============ */
-document.getElementById('switch-identity').addEventListener('click', async ()=>{
-  if(!confirm("Se déconnecter sur ce navigateur ? (utile si plusieurs personnes partagent le même appareil)")) return;
-  if(typeof authReady !== 'undefined' && authReady){
-    try{ await auth.signOut(); }catch(e){ console.warn(e); }
-  }
-  state.selectedCharacter = null;
-  state.participantName = '';
-  state.quizAnswers = { mood:null, note:null, song:'', share:[], shareDetails:{}, need:[], needOther:'', anecdote:'' };
-  goToScreen('screen-select');
-  updateCharacterAvailability();
-});
-
 /* ============ DASHBOARD ============ */
 let currentWeekGame = 'blindtest';
 function initDashboard(){
@@ -820,7 +807,7 @@ function buildDashCharacterGrid(){
     if(!isYou && !answers) return; // personne n'a encore rejoint avec ce personnage ce mois-ci
     const btn = document.createElement('button');
     btn.className = 'character';
-    btn.innerHTML = `<img class="${charImgClass(c.id).trim()}" src="${ASSETS[c.asset]}" alt="${c.name}"><span class="name">${c.name}</span>${isYou ? '<span class="you-badge">C\'est toi</span>' : ''}`;
+    btn.innerHTML = `<img class="${charImgClass(c.id).trim()}" src="${ASSETS[c.asset]}" alt="${c.name}"><span class="name">${c.name}</span>${isYou ? '<span class="you-badge">C\'est toi</span>' : ''}<span class="cta">Voir ses réponses →</span>`;
     btn.addEventListener('click', ()=> openFicheDetail(c, isYou));
     wrap.appendChild(btn);
   });
@@ -1626,12 +1613,7 @@ document.getElementById('admin-archive-reset').addEventListener('click', async (
 });
 
 /* ============ LA LOVE RUBRIQUE ============ */
-const LOVE_MESSAGES = [
-  {name:'Léa', asset:'char_259', text:'Je pense à toi plus souvent que tu ne le crois.'},
-  {name:'Nour', asset:'char_262', text:'Merci d\u2019être exactement comme tu es.'},
-  {name:'Sacha', asset:'char_263', text:'On devrait se voir plus souvent, tu me manques.'},
-  {name:'Camille', asset:'char_264', text:'T\u2019es la personne la plus rassurante que je connaisse.'}
-];
+const LOVE_MESSAGES = [];
 document.getElementById('open-love').addEventListener('click', ()=>{
   openModal('modal-love');
   switchLovePanel('send');
