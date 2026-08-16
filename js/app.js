@@ -177,6 +177,16 @@ function watchMonthlyConfig(){
       needsRefresh = true;
     }
     if(needsRefresh) refreshCharacterNameDisplays();
+    // Si le panneau admin est déjà ouvert au moment où les vraies données
+    // arrivent (ex. ouverture directe sans être passée par la connexion
+    // normale avant, ou données en cache qui arrivent avant l'affichage),
+    // on réaffiche le formulaire avec ces données fraîches — au lieu de
+    // laisser les champs vides comme s'ils avaient été effacés. Le drapeau
+    // se verrouille tout seul après une courte fenêtre (voir admin-gate-submit),
+    // pour ne jamais écraser une saisie en cours après coup.
+    if(!adminPanelFreshlyPopulated && document.getElementById('modal-admin')?.classList.contains('active')){
+      openAdminPanel();
+    }
   }, err=>{ console.warn('Lecture Firestore (config) impossible :', err); });
 }
 function saveMonthlyConfigToCloud(){
@@ -1109,6 +1119,7 @@ const DEFAULT_CREA = {
   when: "Quand vous voulez, avant la fin du mois."
 };
 let monthlyConfig = { crea: {...DEFAULT_CREA}, lettreBody: null, lettreQuote: null, lettreLinkText: null, lettreLinkUrl: null };
+let adminPanelFreshlyPopulated = false; // évite d'écraser une saisie en cours après le premier rafraîchissement
 
 function applyCreaToModal(){
   const c = monthlyConfig.crea || DEFAULT_CREA;
@@ -1594,9 +1605,16 @@ document.getElementById('admin-gate-submit').addEventListener('click', ()=>{
     document.getElementById('admin-gate-error').classList.add('show');
     return;
   }
+  adminPanelFreshlyPopulated = false;
   attachRoomListeners();
   closeModal('modal-admin-gate');
   openAdminPanel();
+  // On accepte les rafraîchissements automatiques (si de vraies données
+  // arrivent après coup) pendant une courte fenêtre après l'ouverture —
+  // que la donnée arrive avant même l'affichage (cache local) ou après
+  // (réseau). Passé ce délai, on ne touche plus au formulaire, pour ne
+  // jamais écraser une saisie en cours.
+  setTimeout(()=>{ adminPanelFreshlyPopulated = true; }, 2500);
 });
 function openAdminPanel(){
   const c = monthlyConfig.crea || DEFAULT_CREA;
