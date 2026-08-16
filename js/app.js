@@ -420,7 +420,7 @@ const characterGrid = document.getElementById('character-grid');
 let characterGridBuilt = false;
 // Ces 4 personnages sont affichés 50% plus grands que les autres partout
 // où ils apparaissent (voir la classe CSS .char-large dans style.css).
-const LARGE_CHARACTERS = ['266','267','268','269'];
+const LARGE_CHARACTERS = [];
 function charImgClass(id){ return LARGE_CHARACTERS.includes(id) ? ' char-large' : ''; }
 
 function buildCharacterGrid(){
@@ -475,6 +475,7 @@ function chooseCharacter(c){
     }
     document.getElementById('love-name').value = state.participantName || '';
     document.getElementById('quiz-submit').textContent = 'Rejoindre la Commando →';
+    document.getElementById('quiz-cancel').style.display = 'none';
     goToScreen('screen-quiz');
     return;
   }
@@ -528,6 +529,7 @@ document.getElementById('letter-continue').addEventListener('click', async ()=>{
   state.participantName = name;
   document.getElementById('love-name').value = state.participantName;
   document.getElementById('quiz-submit').textContent = 'Rejoindre la Commando →';
+  document.getElementById('quiz-cancel').style.display = 'none';
   closeModal('modal-letter');
   goToScreen('screen-quiz');
 });
@@ -802,7 +804,14 @@ function prefillQuizForm(){
 document.getElementById('edit-answers').addEventListener('click', ()=>{
   prefillQuizForm();
   document.getElementById('quiz-submit').textContent = 'Enregistrer mes changements →';
+  document.getElementById('quiz-cancel').style.display = 'flex';
   goToScreen('screen-quiz');
+});
+document.getElementById('quiz-cancel').addEventListener('click', ()=>{
+  if(!confirm('Annuler les modifications et revenir à ton espace ? Rien ne sera enregistré.')) return;
+  document.getElementById('quiz-cancel').style.display = 'none';
+  document.getElementById('quiz-submit').textContent = 'Rejoindre la Commando →';
+  goToScreen('screen-dashboard');
 });
 // Les écouteurs Firestore (participants, messages, config) ne démarrent
 // qu'une fois la salle connue — voir attachRoomListeners(), appelée après
@@ -1089,7 +1098,7 @@ document.getElementById('open-crea').addEventListener('click', ()=>{
 document.getElementById('crea-close').addEventListener('click', ()=> closeModal('modal-crea'));
 
 /* ============ JE PARTICIPE AU DÉFI CRÉATIF ============ */
-let challengeParticipants = {}; // ownerId -> {name, timestamp}, pour le mois/salle en cours
+let challengeParticipants = {}; // ownerId -> {name, timestamp, docId}, pour le mois/salle en cours
 function watchChallengeParticipants(){
   if(typeof firebaseReady === 'undefined' || !firebaseReady || !db || !currentRoomId) return null;
   return db.collection('challengeParticipants')
@@ -1100,7 +1109,7 @@ function watchChallengeParticipants(){
       snapshot.forEach(doc=>{
         const d = doc.data();
         if(d.month !== monthTag) return;
-        map[d.ownerId] = { name: d.name, timestamp: d.timestamp };
+        map[d.ownerId] = { name: d.name, timestamp: d.timestamp, docId: doc.id };
       });
       challengeParticipants = map;
       refreshCreaJoinUI();
@@ -1115,10 +1124,12 @@ function refreshCreaJoinUI(){
   const already = uid && challengeParticipants[uid];
   const count = Object.keys(challengeParticipants).length;
   if(already){
-    btn.textContent = '✓ Tu participes déjà';
-    btn.disabled = true;
+    btn.textContent = '✓ Tu participes — annuler ma participation';
+    btn.classList.add('joined');
+    btn.disabled = false;
   } else {
     btn.textContent = 'Je participe au défi →';
+    btn.classList.remove('joined');
     btn.disabled = false;
   }
   confirmEl.classList.remove('show');
@@ -1134,20 +1145,28 @@ document.getElementById('crea-join-btn').addEventListener('click', async ()=>{
   }
   const btn = document.getElementById('crea-join-btn');
   btn.disabled = true;
+  const already = challengeParticipants[uid];
   try{
-    await db.collection('challengeParticipants').add({
-      roomId: currentRoomId,
-      ownerId: uid,
-      name: state.participantName || 'Quelqu\u2019un',
-      month: currentMonthTag(),
-      timestamp: firebase.firestore.FieldValue.serverTimestamp()
-    });
-    challengeParticipants[uid] = { name: state.participantName, timestamp: null };
-    refreshCreaJoinUI();
-    const confirmEl = document.getElementById('crea-join-confirm');
-    confirmEl.classList.add('show');
+    if(already){
+      // Annuler la participation
+      if(already.docId) await db.collection('challengeParticipants').doc(already.docId).delete();
+      delete challengeParticipants[uid];
+      refreshCreaJoinUI();
+    } else {
+      const ref = await db.collection('challengeParticipants').add({
+        roomId: currentRoomId,
+        ownerId: uid,
+        name: state.participantName || 'Quelqu\u2019un',
+        month: currentMonthTag(),
+        timestamp: firebase.firestore.FieldValue.serverTimestamp()
+      });
+      challengeParticipants[uid] = { name: state.participantName, timestamp: null, docId: ref.id };
+      refreshCreaJoinUI();
+      const confirmEl = document.getElementById('crea-join-confirm');
+      confirmEl.classList.add('show');
+    }
   }catch(err){
-    console.warn("Impossible d'enregistrer ta participation :", err);
+    console.warn("Impossible de mettre à jour ta participation :", err);
     btn.disabled = false;
     alert(`Une erreur est survenue, réessaie dans un instant. (détail : ${(err && (err.code || err.message)) || 'inconnu'})`);
   }
