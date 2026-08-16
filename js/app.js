@@ -33,11 +33,11 @@ const MOODS = [
 const SHARES = [
   {id:'book', label:'Un livre', icon:'book', detailLabel:'Quel livre ?', detailPlaceholder:'Titre, autrice...'},
   {id:'film', label:'Un film', icon:'film', detailLabel:'Quel film ?', detailPlaceholder:'Titre...'},
-  {id:'recipe', label:'Une recette', icon:'recipe', detailLabel:'Quelle recette ?', detailPlaceholder:'Le plat...'},
+  {id:'recipe', label:'Une recette', icon:'recipe', detailLabel:'Quelle recette ?', detailPlaceholder:'Le plat, les ingrédients, une astuce...', multiline:true},
   {id:'podcast', label:'Un podcast', icon:'podcast', detailLabel:'Quel podcast ?', detailPlaceholder:'Nom, épisode...'},
   {id:'series', label:'Une série', icon:'series', detailLabel:'Quelle série ?', detailPlaceholder:'Titre...'},
-  {id:'laugh', label:'Une blague', icon:'laugh', detailLabel:'Vas-y, raconte', detailPlaceholder:'On t\u2019écoute...'},
-  {id:'other', label:'Autre', icon:'other', detailLabel:'Dis-nous en plus', detailPlaceholder:'Ce que tu veux partager...'}
+  {id:'laugh', label:'Une blague', icon:'laugh', detailLabel:'Vas-y, raconte', detailPlaceholder:'On t\u2019écoute...', multiline:true},
+  {id:'other', label:'Autre', icon:'other', detailLabel:'Dis-nous en plus', detailPlaceholder:'Ce que tu veux partager...', multiline:true}
 ];
 const NEEDS = [
   {id:'hug', label:'Un câlin', icon:'hug'},
@@ -257,6 +257,23 @@ function findMeta(list, id){ return list.find(x=>x.id===id); }
 function shuffle(arr){ const a = arr.slice(); for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
 
 /* ---------- conversion de liens Spotify / YouTube en vrai lecteur embarqué ---------- */
+// Transforme un texte libre en HTML sûr, avec les liens (http/https) rendus
+// cliquables — utile pour "musique du mois" et autres champs où quelqu'un
+// peut coller un lien Spotify/YouTube/autre sans que ce soit un vrai embed.
+function escapeHtml(str){
+  return String(str)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+function linkifyText(text){
+  if(!text) return '';
+  const escaped = escapeHtml(text);
+  return escaped.replace(/(https?:\/\/[^\s<]+)/g, url=>{
+    const clean = url.replace(/[),.;!?]+$/, ''); // ponctuation finale hors du lien
+    const trailing = url.slice(clean.length);
+    return `<a href="${clean}" target="_blank" rel="noopener" class="inline-link">${clean}</a>${trailing}`;
+  });
+}
 function toEmbedInfo(link){
   if(!link) return null;
   const spotifyMatch = link.match(/open\.spotify\.com\/(?:intl-\w+\/)?track\/([a-zA-Z0-9]+)/);
@@ -413,7 +430,7 @@ function buildCharacterGrid(){
     btn.className = 'character';
     btn.type = 'button';
     btn.dataset.id = c.id;
-    btn.innerHTML = `<img class="${charImgClass(c.id).trim()}" src="${ASSETS[c.asset]}" alt="${c.name}"><span class="name">${c.name}</span>`;
+    btn.innerHTML = `<img class="${charImgClass(c.id).trim()}" src="${ASSETS[c.asset]}" alt="${c.name}" onload="this.classList.add('img-loaded')" onerror="this.classList.add('img-loaded')"><span class="name">${c.name}</span>`;
     btn.addEventListener('click', ()=> chooseCharacter(c));
     characterGrid.appendChild(btn);
   });
@@ -720,8 +737,10 @@ function syncShareDetails(){
     const row = document.createElement('div');
     row.className = 'detail-row'; row.dataset.key = id;
     row.innerHTML = `<label>${meta.detailLabel}</label>`;
-    const input = document.createElement('input');
-    input.type = 'text'; input.placeholder = meta.detailPlaceholder || '';
+    const input = document.createElement(meta.multiline ? 'textarea' : 'input');
+    if(!meta.multiline) input.type = 'text';
+    else { input.rows = 3; input.className = 'other-field'; input.style.display = 'block'; }
+    input.placeholder = meta.detailPlaceholder || '';
     input.value = state.quizAnswers.shareDetails[id] || '';
     input.addEventListener('input', ()=>{ state.quizAnswers.shareDetails[id] = input.value; });
     row.appendChild(input);
@@ -825,7 +844,7 @@ function buildDashCharacterGrid(){
     if(!isYou && !answers) return; // personne n'a encore rejoint avec ce personnage ce mois-ci
     const btn = document.createElement('button');
     btn.className = 'character';
-    btn.innerHTML = `<img class="${charImgClass(c.id).trim()}" src="${ASSETS[c.asset]}" alt="${c.name}"><span class="name">${c.name}</span>${isYou ? '<span class="you-badge">C\'est toi</span>' : ''}<span class="cta">Voir ses réponses →</span>`;
+    btn.innerHTML = `<img class="${charImgClass(c.id).trim()}" src="${ASSETS[c.asset]}" alt="${c.name}" onload="this.classList.add('img-loaded')" onerror="this.classList.add('img-loaded')"><span class="name">${c.name}</span>${isYou ? '<span class="you-badge">C\'est toi</span>' : ''}<span class="cta">Voir ses réponses →</span>`;
     btn.addEventListener('click', ()=> openFicheDetail(c, isYou));
     wrap.appendChild(btn);
   });
@@ -855,7 +874,10 @@ function openFicheDetail(c, isYou){
   document.getElementById('fiche-tag').textContent = isYou ? `Ta fiche · ${answers.name}` : `${answers.name} · La Commando`;
   setIcon(document.getElementById('fiche-mood-icon'), moodMeta ? moodMeta.icon : 'sun');
   document.getElementById('fiche-mood-val').textContent = `${moodMeta ? moodMeta.label : '—'} · ${answers.note}/10`;
-  document.getElementById('fiche-song-val').textContent = answers.song ? answers.song : '—';
+  const songEmbed = answers.song ? renderEmbed(answers.song) : '';
+  document.getElementById('fiche-song-val').innerHTML = songEmbed
+    ? songEmbed
+    : (answers.song ? linkifyText(answers.song) : '—');
   renderChips(document.getElementById('fiche-share-val'), answers.share, SHARES, answers.shareDetails, answers.shareDetails ? answers.shareDetails.other : '');
   renderChips(document.getElementById('fiche-need-val'), answers.need, NEEDS, null, answers.needOther);
 
@@ -865,7 +887,7 @@ function openFicheDetail(c, isYou){
     anecdoteRow.style.display = 'none';
   } else {
     anecdoteRow.style.display = '';
-    document.getElementById('fiche-anecdote-val').textContent = anecdoteText;
+    document.getElementById('fiche-anecdote-val').innerHTML = linkifyText(anecdoteText);
   }
 
   openModal('modal-fiche-detail');
@@ -909,7 +931,7 @@ function buildRecsFeed(){
     catItems.forEach(it=>{
       const div = document.createElement('div');
       div.className = 'recs-feed-item';
-      div.innerHTML = `<strong style="color:${colorForName(it.name)};">${it.name}</strong>${it.detail ? ' — <em>'+it.detail+'</em>' : ''}`;
+      div.innerHTML = `<strong style="color:${colorForName(it.name)};">${escapeHtml(it.name)}</strong>${it.detail ? ' — <em>'+linkifyText(it.detail)+'</em>' : ''}`;
       itemsWrap.appendChild(div);
     });
     wrap.appendChild(catDiv);
@@ -932,7 +954,7 @@ function buildEventsFeed(){
   shuffle(entries).forEach(it=>{
     const div = document.createElement('div');
     div.className = 'recs-feed-item';
-    div.innerHTML = `<strong style="color:${colorForName(it.name)};">${it.name}</strong> — ${it.text}`;
+    div.innerHTML = `<strong style="color:${colorForName(it.name)};">${escapeHtml(it.name)}</strong> — ${linkifyText(it.text)}`;
     wrap.appendChild(div);
   });
 }
