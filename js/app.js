@@ -490,7 +490,8 @@ function chooseCharacter(c){
     }
     document.getElementById('love-name').value = state.participantName || '';
     document.getElementById('quiz-submit').textContent = 'Rejoindre la Commando →';
-    document.getElementById('quiz-cancel').style.display = 'none';
+    quizMode = 'signup';
+    document.getElementById('quiz-cancel').style.display = 'flex';
     goToScreen('screen-quiz');
     return;
   }
@@ -544,7 +545,8 @@ document.getElementById('letter-continue').addEventListener('click', async ()=>{
   state.participantName = name;
   document.getElementById('love-name').value = state.participantName;
   document.getElementById('quiz-submit').textContent = 'Rejoindre la Commando →';
-  document.getElementById('quiz-cancel').style.display = 'none';
+  quizMode = 'signup';
+  document.getElementById('quiz-cancel').style.display = 'flex';
   closeModal('modal-letter');
   goToScreen('screen-quiz');
 });
@@ -819,14 +821,27 @@ function prefillQuizForm(){
 document.getElementById('edit-answers').addEventListener('click', ()=>{
   prefillQuizForm();
   document.getElementById('quiz-submit').textContent = 'Enregistrer mes changements →';
+  quizMode = 'edit';
   document.getElementById('quiz-cancel').style.display = 'flex';
   goToScreen('screen-quiz');
 });
+let quizMode = 'signup'; // 'signup' = première inscription ou nouveau mois, 'edit' = modification
 document.getElementById('quiz-cancel').addEventListener('click', ()=>{
-  if(!confirm('Annuler les modifications et revenir à ton espace ? Rien ne sera enregistré.')) return;
-  document.getElementById('quiz-cancel').style.display = 'none';
-  document.getElementById('quiz-submit').textContent = 'Rejoindre la Commando →';
-  goToScreen('screen-dashboard');
+  if(quizMode === 'edit'){
+    if(!confirm('Annuler les modifications et revenir à ton espace ? Rien ne sera enregistré.')) return;
+    document.getElementById('quiz-cancel').style.display = 'none';
+    document.getElementById('quiz-submit').textContent = 'Rejoindre la Commando →';
+    goToScreen('screen-dashboard');
+  } else {
+    if(!confirm('Choisir un autre personnage ? Tes réponses actuelles ne seront pas enregistrées.')) return;
+    document.getElementById('quiz-cancel').style.display = 'none';
+    state.selectedCharacter = null;
+    state.quizAnswers = { mood:null, note:null, song:'', share:[], shareDetails:{}, need:[], needOther:'', anecdote:'', events:'' };
+    document.querySelectorAll('#character-grid .character').forEach(el=>{
+      el.classList.remove('chosen','fade-out');
+    });
+    goToScreen('screen-select');
+  }
 });
 // Les écouteurs Firestore (participants, messages, config) ne démarrent
 // qu'une fois la salle connue — voir attachRoomListeners(), appelée après
