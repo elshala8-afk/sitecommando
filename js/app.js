@@ -248,7 +248,7 @@ function refreshLiveViews(){
 }
 function connectionBadgeText(){
   return (typeof firebaseReady !== 'undefined' && firebaseReady)
-    ? '🟢 Connecté — les réponses sont partagées avec toute la Commando'
+    ? `🟢 Connecté — les réponses sont partagées avec le groupe ${roomLabel()}`
     : '⚪ Mode démo local — active Firebase (voir README) pour un vrai partage';
 }
 
@@ -366,6 +366,7 @@ async function resolveRoomFromCode(code){
     currentRoomId = 'demo';
     currentRoomAdminPassword = DEMO_ADMIN_PASSWORD;
     currentRoomName = 'Démo';
+    applyRoomBranding();
     return {found:true};
   }
   try{
@@ -379,11 +380,25 @@ async function resolveRoomFromCode(code){
     currentRoomId = roomDoc.id;
     currentRoomAdminPassword = roomDoc.data().adminPassword;
     currentRoomName = roomDoc.data().name || roomDoc.id;
+    applyRoomBranding();
     return {found:true};
   }catch(err){
     console.warn('Recherche de salle impossible :', err);
     return {found:false, error: (err && err.code) ? err.code : String(err)};
   }
+}
+// Nom affiché du groupe : le nom de la salle (ex. "Les Copines de Lyon") si
+// connu, sinon "La Commando" par défaut (mode démo, ou salle sans nom).
+function roomLabel(){
+  return (currentRoomName && currentRoomName !== 'Démo') ? currentRoomName : 'La Commando';
+}
+function applyRoomBranding(){
+  const label = roomLabel();
+  document.title = `${label} — ton mois`;
+  const titleEl = document.getElementById('commando-title');
+  if(titleEl) titleEl.textContent = label;
+  const signoffEl = document.getElementById('lettre-signoff-name');
+  if(signoffEl) signoffEl.textContent = label;
 }
 
 loginForm.addEventListener('submit', async (e)=>{
@@ -882,7 +897,7 @@ function openFicheDetail(c, isYou){
   document.getElementById('fiche-img').alt = c.name;
   document.getElementById('fiche-img').className = charImgClass(c.id).trim();
   document.getElementById('fiche-name').textContent = c.name;
-  document.getElementById('fiche-tag').textContent = isYou ? `Ta fiche · ${answers.name}` : `${answers.name} · La Commando`;
+  document.getElementById('fiche-tag').textContent = isYou ? `Ta fiche · ${answers.name}` : `${answers.name} · ${roomLabel()}`;
   const badgeOwnerId = isYou ? getCurrentUid() : answers.ownerId;
   const challengeBadge = document.getElementById('fiche-challenge-badge');
   challengeBadge.style.display = (badgeOwnerId && challengeParticipants[badgeOwnerId]) ? 'inline-block' : 'none';
@@ -1134,7 +1149,7 @@ function refreshCreaJoinUI(){
   }
   confirmEl.classList.remove('show');
   countEl.textContent = count > 0
-    ? `${count} personne${count>1?'s':''} de la Commando participe${count>1?'nt':''} déjà 💪`
+    ? `${count} personne${count>1?'s':''} de ${roomLabel()} participe${count>1?'nt':''} déjà 💪`
     : '';
 }
 document.getElementById('crea-join-btn').addEventListener('click', async ()=>{
