@@ -56,9 +56,9 @@ const CHARACTERS = [
   {id:'264', name:'Boucles',        asset:'char_264', active:true},
   {id:'265', name:'Zen',            asset:'char_265', active:true},
   {id:'266', name:'Grand Sourire',  asset:'char_266', active:true},
-  {id:'267', name:'Gourmand',       asset:'char_267', active:true},
+  {id:'267', name:'Fraise',         asset:'char_267', active:true},
   {id:'268', name:'Libellule',      asset:'char_268', active:true},
-  {id:'269', name:'Fraise',         asset:'char_269', active:true}
+  {id:'269', name:'Batou',          asset:'char_269', active:true}
 ];
 
 const MOCK_ANSWERS = {
@@ -874,6 +874,9 @@ function openFicheDetail(c, isYou){
   document.getElementById('fiche-img').className = charImgClass(c.id).trim();
   document.getElementById('fiche-name').textContent = c.name;
   document.getElementById('fiche-tag').textContent = isYou ? `Ta fiche · ${answers.name}` : `${answers.name} · La Commando`;
+  const badgeOwnerId = isYou ? getCurrentUid() : answers.ownerId;
+  const challengeBadge = document.getElementById('fiche-challenge-badge');
+  challengeBadge.style.display = (badgeOwnerId && challengeParticipants[badgeOwnerId]) ? 'inline-block' : 'none';
   setIcon(document.getElementById('fiche-mood-icon'), moodMeta ? moodMeta.icon : 'sun');
   document.getElementById('fiche-mood-val').textContent = `${moodMeta ? moodMeta.label : '—'} · ${answers.note}/10`;
   const songEmbed = answers.song ? renderEmbed(answers.song) : '';
@@ -1146,7 +1149,7 @@ document.getElementById('crea-join-btn').addEventListener('click', async ()=>{
   }catch(err){
     console.warn("Impossible d'enregistrer ta participation :", err);
     btn.disabled = false;
-    alert("Une erreur est survenue, réessaie dans un instant.");
+    alert(`Une erreur est survenue, réessaie dans un instant. (détail : ${(err && (err.code || err.message)) || 'inconnu'})`);
   }
 });
 
@@ -1754,55 +1757,19 @@ function drawLoveMessage(){
   const card = document.getElementById('receive-card');
   let html = `<img src="${ASSETS[pick.asset]}" alt=""><div class="r-name">De la part de ${pick.name}</div>`;
   if(pick.text) html += `<div class="r-text">« ${pick.text} »</div>`;
-  if(pick.audioUrl) html += `<audio controls src="${pick.audioUrl}"></audio>`;
   card.innerHTML = html;
 }
 document.getElementById('receive-another').addEventListener('click', drawLoveMessage);
 
-let mediaRecorder=null, audioChunks=[], recordedBlobUrl=null, micStream=null;
-const voiceBtn = document.getElementById('voice-record');
-const voiceLabel = document.getElementById('voice-record-label');
-const voiceStatus = document.getElementById('voice-status');
-const voicePreview = document.getElementById('voice-preview');
-voiceBtn.addEventListener('click', async ()=>{
-  if(voiceBtn.classList.contains('recording')){ mediaRecorder && mediaRecorder.stop(); return; }
-  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
-    voiceStatus.textContent = "Le micro n'est pas accessible depuis ce navigateur.";
-    return;
-  }
-  try{
-    micStream = await navigator.mediaDevices.getUserMedia({audio:true});
-    audioChunks = [];
-    mediaRecorder = new MediaRecorder(micStream);
-    mediaRecorder.ondataavailable = (e)=> audioChunks.push(e.data);
-    mediaRecorder.onstop = ()=>{
-      const blob = new Blob(audioChunks, {type:'audio/webm'});
-      recordedBlobUrl = URL.createObjectURL(blob);
-      voicePreview.src = recordedBlobUrl;
-      voicePreview.style.display = 'block';
-      voiceBtn.classList.remove('recording');
-      voiceLabel.textContent = 'Recommencer la note vocale';
-      voiceStatus.textContent = 'Note vocale prête ✓';
-      micStream.getTracks().forEach(t=>t.stop());
-    };
-    mediaRecorder.start();
-    voiceBtn.classList.add('recording');
-    voiceLabel.textContent = 'Arrêter l\u2019enregistrement';
-    voiceStatus.textContent = 'Enregistrement en cours…';
-  }catch(err){
-    voiceStatus.textContent = "Le micro n'est pas accessible depuis ce fichier local — cette fonctionnalité marchera une fois le site en ligne.";
-  }
-});
 document.getElementById('love-send').addEventListener('click', ()=>{
   const text = document.getElementById('love-text').value.trim();
   const name = document.getElementById('love-name').value.trim() || state.participantName;
-  if(!text && !recordedBlobUrl){
-    voiceStatus.textContent = "Écris un mot ou enregistre une note vocale avant d'envoyer.";
+  if(!text){
     return;
   }
   const asset = state.selectedCharacter ? state.selectedCharacter.asset : 'char_258';
-  LOVE_MESSAGES.push({ name, asset, text, audioUrl: recordedBlobUrl });
-  messages.push({ name, text, audioUrl: recordedBlobUrl });
+  LOVE_MESSAGES.push({ name, asset, text });
+  messages.push({ name, text });
   if(typeof firebaseReady !== 'undefined' && firebaseReady && db && text){
     db.collection('messages').add({
       roomId: currentRoomId,
@@ -1814,11 +1781,6 @@ document.getElementById('love-send').addEventListener('click', ()=>{
     }).catch(err=> console.warn("Impossible d'enregistrer le message dans Firebase :", err));
   }
   document.getElementById('love-text').value = '';
-  voicePreview.style.display = 'none';
-  voicePreview.removeAttribute('src');
-  voiceLabel.textContent = 'Enregistrer une note vocale';
-  voiceStatus.textContent = '';
-  recordedBlobUrl = null;
   const confirmEl = document.getElementById('love-send-confirm');
   confirmEl.classList.add('show');
   setTimeout(()=> confirmEl.classList.remove('show'), 3000);
