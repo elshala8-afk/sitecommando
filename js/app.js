@@ -578,7 +578,16 @@ document.getElementById('signin-submit').addEventListener('click', async ()=>{
   }
   const submitBtn = document.getElementById('signin-submit');
   submitBtn.disabled = true;
-  const foundRoom = await resolveRoomFromCode(code);
+  let foundRoom;
+  try{
+    foundRoom = await resolveRoomFromCode(code);
+  }catch(roomErr){
+    console.warn('resolveRoomFromCode (déjà inscrit·e) :', roomErr);
+    submitBtn.disabled = false;
+    errorEl.textContent = `Une erreur technique est survenue. Réessaie. (détail : ${(roomErr && (roomErr.code || roomErr.message)) || 'inconnu'})`;
+    errorEl.classList.add('show');
+    return;
+  }
   submitBtn.disabled = false;
   if(!foundRoom.found){
     errorEl.textContent = "Ce code ne correspond à aucune salle — vérifie-le avant de te reconnecter.";
@@ -596,39 +605,48 @@ document.getElementById('signin-submit').addEventListener('click', async ()=>{
     closeModal('modal-signin');
     let attempts = 0;
     const tryFind = async () => {
-      const found = findOwnParticipant(cred.user.uid);
-      if(found){
-        const c = CHARACTERS.find(ch => ch.id === found.charId);
-        if(c){
-          state.selectedCharacter = c;
-          state.participantName = found.data.name;
-          document.getElementById('love-name').value = found.data.name;
-          initDashboard();
-          goToScreen('screen-dashboard');
-          return;
-        }
-      }
-      attempts++;
-      if(attempts < 12){ setTimeout(tryFind, 300); }
-      else {
-        // Dernier recours : une vraie requête Firestore directe, au cas où
-        // l'écoute en direct n'aurait pas encore reçu les données (connexion
-        // lente) — plus fiable que d'abandonner après seulement 3,6 secondes.
-        const directFound = await findOwnParticipantDirect(cred.user.uid);
-        if(directFound){
-          const c = CHARACTERS.find(ch => ch.id === directFound.charId);
+      try{
+        const found = findOwnParticipant(cred.user.uid);
+        if(found){
+          const c = CHARACTERS.find(ch => ch.id === found.charId);
           if(c){
             state.selectedCharacter = c;
-            state.participantName = directFound.data.name;
-            document.getElementById('love-name').value = directFound.data.name;
+            state.participantName = found.data.name;
+            document.getElementById('love-name').value = found.data.name;
             initDashboard();
             goToScreen('screen-dashboard');
             return;
           }
         }
-        alert("Tu es connecté·e ! Tu n'as pas encore répondu pour ce mois-ci — choisis ton personnage pour rejoindre.");
-        if(!characterGridBuilt) buildCharacterGrid();
-        goToScreen('screen-select');
+        attempts++;
+        if(attempts < 12){ setTimeout(tryFind, 300); }
+        else {
+          // Dernier recours : une vraie requête Firestore directe, au cas où
+          // l'écoute en direct n'aurait pas encore reçu les données (connexion
+          // lente) — plus fiable que d'abandonner après seulement 3,6 secondes.
+          const directFound = await findOwnParticipantDirect(cred.user.uid);
+          if(directFound){
+            const c = CHARACTERS.find(ch => ch.id === directFound.charId);
+            if(c){
+              state.selectedCharacter = c;
+              state.participantName = directFound.data.name;
+              document.getElementById('love-name').value = directFound.data.name;
+              initDashboard();
+              goToScreen('screen-dashboard');
+              return;
+            }
+          }
+          alert("Tu es connecté·e ! Tu n'as pas encore répondu pour ce mois-ci — choisis ton personnage pour rejoindre.");
+          if(!characterGridBuilt) buildCharacterGrid();
+          goToScreen('screen-select');
+        }
+      }catch(innerErr){
+        // Filet de sécurité : une erreur ici (ex. particularité Safari) ne
+        // doit jamais rester invisible pour la personne qui utilise le site.
+        console.warn('tryFind (déjà inscrit·e) :', innerErr);
+        openModal('modal-signin');
+        errorEl.textContent = "Connexion réussie, mais une erreur technique a empêché de retrouver ton espace. Réessaie, ou contacte l'administratrice si ça persiste.";
+        errorEl.classList.add('show');
       }
     };
     tryFind();
@@ -639,7 +657,7 @@ document.getElementById('signin-submit').addEventListener('click', async ()=>{
     } else if(err.code === 'auth/user-not-found'){
       errorEl.textContent = "Aucun compte trouvé avec ce prénom — vérifie l'orthographe, ou inscris-toi d'abord.";
     } else {
-      errorEl.textContent = 'Connexion impossible pour le moment.';
+      errorEl.textContent = `Connexion impossible pour le moment. (détail : ${(err && (err.code || err.message)) || 'inconnu'})`;
     }
     errorEl.classList.add('show');
   }
