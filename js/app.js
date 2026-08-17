@@ -389,7 +389,7 @@ async function resolveRoomFromCode(code){
     if(!roomDoc) return {found:false};
     currentRoomId = roomDoc.id;
     currentRoomAdminPassword = roomDoc.data().adminPassword;
-    currentRoomName = roomDoc.data().name || roomDoc.id;
+    currentRoomName = roomDoc.data().name || null; // si vide, roomLabel() affichera "Ma communauté" par défaut
     applyRoomBranding();
     return {found:true};
   }catch(err){
@@ -398,9 +398,9 @@ async function resolveRoomFromCode(code){
   }
 }
 // Nom affiché du groupe : le nom de la salle (ex. "Les Copines de Lyon") si
-// connu, sinon "La Commando" par défaut (mode démo, ou salle sans nom).
+// connu, sinon "Ma communauté" par défaut (mode démo, ou salle sans nom).
 function roomLabel(){
-  return (currentRoomName && currentRoomName !== 'Démo') ? currentRoomName : 'La Commando';
+  return (currentRoomName && currentRoomName !== 'Démo') ? currentRoomName : 'Ma communauté';
 }
 function applyRoomBranding(){
   const label = roomLabel();
@@ -499,7 +499,7 @@ function chooseCharacter(c){
       state.participantName = auth.currentUser.displayName;
     }
     document.getElementById('love-name').value = state.participantName || '';
-    document.getElementById('quiz-submit').textContent = 'Rejoindre la Commando →';
+    document.getElementById('quiz-submit').textContent = 'Rejoindre →';
     quizMode = 'signup';
     document.getElementById('quiz-cancel').style.display = 'flex';
     goToScreen('screen-quiz');
@@ -541,7 +541,7 @@ document.getElementById('letter-continue').addEventListener('click', async ()=>{
     }catch(err){
       console.warn(err);
       if(err.code === 'auth/email-already-in-use'){
-        errorEl.textContent = "Ce prénom a déjà un compte. Si c'est le tien, utilise \"Déjà inscrit·e ?\" sur l'écran de connexion. Si vous êtes deux à porter ce prénom dans la Commando, ajoute une précision (ex. \"Charlotte B\") et réessaie.";
+        errorEl.textContent = "Ce prénom a déjà un compte. Si c'est le tien, utilise \"Déjà inscrit·e ?\" sur l'écran de connexion. Si vous êtes deux à porter ce prénom dans ta communauté, ajoute une précision (ex. \"Charlotte B\") et réessaie.";
       } else if(err.code === 'auth/weak-password'){
         errorEl.textContent = 'Ton mot de passe doit faire au moins 6 caractères.';
       } else {
@@ -554,7 +554,7 @@ document.getElementById('letter-continue').addEventListener('click', async ()=>{
 
   state.participantName = name;
   document.getElementById('love-name').value = state.participantName;
-  document.getElementById('quiz-submit').textContent = 'Rejoindre la Commando →';
+  document.getElementById('quiz-submit').textContent = 'Rejoindre →';
   quizMode = 'signup';
   document.getElementById('quiz-cancel').style.display = 'flex';
   closeModal('modal-letter');
@@ -840,7 +840,7 @@ document.getElementById('quiz-cancel').addEventListener('click', ()=>{
   if(quizMode === 'edit'){
     if(!confirm('Annuler les modifications et revenir à ton espace ? Rien ne sera enregistré.')) return;
     document.getElementById('quiz-cancel').style.display = 'none';
-    document.getElementById('quiz-submit').textContent = 'Rejoindre la Commando →';
+    document.getElementById('quiz-submit').textContent = 'Rejoindre →';
     goToScreen('screen-dashboard');
   } else {
     if(!confirm('Choisir un autre personnage ? Tes réponses actuelles ne seront pas enregistrées.')) return;
@@ -1115,7 +1115,7 @@ const DEFAULT_CREA = {
   body2: "Plus discret·ète ? Un petit album photo « Summer Mood » nous comblera tout autant. L'essentiel, c'est de partager un fragment de ton été.",
   tools: "CapCut (ou l'appli de montage que tu préfères) — gratuite et simple.",
   consignes: "Vous faites comme vous voulez. On veut juste un peu de votre été.",
-  where: "Sur notre groupe Commando 💛",
+  where: "Sur notre groupe 💛",
   when: "Quand vous voulez, avant la fin du mois."
 };
 let monthlyConfig = { crea: {...DEFAULT_CREA}, lettreBody: null, lettreQuote: null, lettreLinkText: null, lettreLinkUrl: null };
@@ -1181,7 +1181,7 @@ function refreshCreaJoinUI(){
 document.getElementById('crea-join-btn').addEventListener('click', async ()=>{
   const uid = getCurrentUid();
   if(typeof firebaseReady === 'undefined' || !firebaseReady || !db || !currentRoomId || !uid){
-    alert("Il faut être connecté·e pour confirmer ta participation — rejoins d'abord la Commando depuis l'écran de connexion.");
+    alert("Il faut être connecté·e pour confirmer ta participation — rejoins d'abord ta communauté depuis l'écran de connexion.");
     return;
   }
   const btn = document.getElementById('crea-join-btn');
@@ -1470,7 +1470,7 @@ function finishQuiz(){
 }
 
 /* --- Semaine 4 : imitation d'une vraie photo de référence ---
-   La photo de référence doit être fournie par la Commando elle-même
+   La photo de référence doit être fournie par la communauté elle-même
    (on ne peut pas intégrer une photo dont on n'a pas les droits). */
 let imitationRefImg = null;
 
@@ -1632,7 +1632,7 @@ function openAdminPanel(){
   buildAdminCharactersList();
   document.getElementById('admin-status-note').textContent =
     (typeof firebaseReady !== 'undefined' && firebaseReady)
-      ? 'Ces changements seront visibles par toute la Commando.'
+      ? 'Ces changements seront visibles par toute la communauté.'
       : 'Mode démo local : ces changements ne seront visibles que dans ce navigateur, le temps de la session.';
   openModal('modal-admin');
 }
