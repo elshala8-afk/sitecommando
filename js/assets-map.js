@@ -27,5 +27,10 @@ const ASSETS = {
   bg_22:   'assets/backgrounds/bg_22.webp',
   bg_292:  'assets/backgrounds/bg_292.webp',
   bg_400:  'assets/backgrounds/bg_400.webp',
-  bg_401:  'assets/backgrounds/bg_401.webp'
+  bg_401:  'assets/backgrounds/bg_401.webp',
+  bg_402:  'assets/backgrounds/bg_402.webp',
+  bg_403:  'assets/backgrounds/bg_403.webp',
+  bg_404:  'assets/backgrounds/bg_404.webp',
+  bg_405:  'assets/backgrounds/bg_405.webp',
+  bg_406:  'assets/backgrounds/bg_406.webp'
 };

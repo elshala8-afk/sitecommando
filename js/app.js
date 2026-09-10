@@ -314,7 +314,7 @@ function renderEmbed(link){
 }
 
 /* ---------- fonds immersifs : rotation en fondu, sans parallax ---------- */
-const BG_SEQUENCE = ['bg_12','bg_13','bg_0334','bg_22','bg_292','bg_400','bg_401'];
+const BG_SEQUENCE = ['bg_12','bg_13','bg_0334','bg_22','bg_292','bg_400','bg_401','bg_402','bg_403','bg_404','bg_405','bg_406'];
 function initBgCycle(containerId, offset, interval){
   const container = document.getElementById(containerId);
   if(!container) return;
