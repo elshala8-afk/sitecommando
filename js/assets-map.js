@@ -12,9 +12,20 @@ const ASSETS = {
   char_267: 'assets/characters/char_267.webp',
   char_268: 'assets/characters/char_268.webp',
   char_269: 'assets/characters/char_269.webp',
+  char_270: 'assets/characters/char_270.webp',
+  char_271: 'assets/characters/char_271.webp',
+  char_272: 'assets/characters/char_272.webp',
+  char_273: 'assets/characters/char_273.webp',
+  char_274: 'assets/characters/char_274.webp',
+  char_275: 'assets/characters/char_275.webp',
+  char_276: 'assets/characters/char_276.webp',
+  char_277: 'assets/characters/char_277.webp',
+  char_278: 'assets/characters/char_278.webp',
   bg_12:   'assets/backgrounds/bg_12.webp',
   bg_13:   'assets/backgrounds/bg_13.webp',
   bg_0334: 'assets/backgrounds/bg_0334.webp',
   bg_22:   'assets/backgrounds/bg_22.webp',
-  bg_292:  'assets/backgrounds/bg_292.webp'
+  bg_292:  'assets/backgrounds/bg_292.webp',
+  bg_400:  'assets/backgrounds/bg_400.webp',
+  bg_401:  'assets/backgrounds/bg_401.webp'
 };

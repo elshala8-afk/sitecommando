@@ -58,7 +58,16 @@ const CHARACTERS = [
   {id:'266', name:'Grand Sourire',  asset:'char_266', active:true},
   {id:'267', name:'Fraise',         asset:'char_267', active:true},
   {id:'268', name:'Libellule',      asset:'char_268', active:true},
-  {id:'269', name:'Batou',          asset:'char_269', active:true}
+  {id:'269', name:'Batou',          asset:'char_269', active:true},
+  {id:'270', name:'Tornade',        asset:'char_270', active:true},
+  {id:'271', name:'Sage',           asset:'char_271', active:true},
+  {id:'272', name:'Nuage',          asset:'char_272', active:true},
+  {id:'273', name:'Caillou',        asset:'char_273', active:true},
+  {id:'274', name:'Flamme',         asset:'char_274', active:true},
+  {id:'275', name:'Éclat',          asset:'char_275', active:true},
+  {id:'276', name:'Vague',          asset:'char_276', active:true},
+  {id:'277', name:'Cocotte',        asset:'char_277', active:true},
+  {id:'278', name:'Tournesol',      asset:'char_278', active:true}
 ];
 
 const MOCK_ANSWERS = {
@@ -305,7 +314,7 @@ function renderEmbed(link){
 }
 
 /* ---------- fonds immersifs : rotation en fondu, sans parallax ---------- */
-const BG_SEQUENCE = ['bg_12','bg_13','bg_0334','bg_22','bg_292'];
+const BG_SEQUENCE = ['bg_12','bg_13','bg_0334','bg_22','bg_292','bg_400','bg_401'];
 function initBgCycle(containerId, offset, interval){
   const container = document.getElementById(containerId);
   if(!container) return;
@@ -330,7 +339,7 @@ function initBgCycle(containerId, offset, interval){
   ['bgcycle-login',0], ['bgcycle-select',1], ['bgcycle-letter',2], ['bgcycle-quiz',3],
   ['bgcycle-dashboard',4], ['bgcycle-fiches',0], ['bgcycle-fiche-detail',1], ['bgcycle-binome',2], ['bgcycle-recs',3],
   ['bgcycle-crea',3], ['bgcycle-jouer',4], ['bgcycle-lettre',0], ['bgcycle-love',1], ['bgcycle-playlist',2],
-  ['bgcycle-admin-gate',3], ['bgcycle-admin',4]
+  ['bgcycle-admin-gate',3], ['bgcycle-admin',4], ['bgcycle-quiz-genz',1]
 ].forEach(([id,offset],i)=>{
   if(id === 'bgcycle-login'){
     // Le fond de l'écran de connexion doit être visible tout de suite.
@@ -1852,6 +1861,86 @@ document.getElementById('love-send').addEventListener('click', ()=>{
   confirmEl.classList.add('show');
   setTimeout(()=> confirmEl.classList.remove('show'), 3000);
 });
+
+/* ============ LE QUIZ DE LA BOOMEUSE (vocabulaire Gen Z) ============ */
+const QUIZ_GENZ_QUESTIONS = [
+  { prompt:"« Avoir un pain » (ou « mon pain ») veut dire...",
+    options:["Avoir faim","Avoir un crush, quelqu'un qui nous attire","Être fauché·e","Être de mauvaise humeur"], correct:1 },
+  { prompt:"Dans ce contexte, « la boulangerie » désigne...",
+    options:["Le lycée","L'univers amoureux, l'endroit où on trouve son crush","Un groupe d'amis","Les réseaux sociaux"], correct:1 },
+  { prompt:"Un « pain brioché » c'est...",
+    options:["Un ami proche","Un coup de foudre, un crush particulièrement intense","Quelqu'un de riche","Une personne ennuyeuse"], correct:1 },
+  { prompt:"Un « pain rassis » c'est...",
+    options:["Un ex","Quelqu'un qui ne nous attire pas du tout","Une vieille photo","Un compliment raté"], correct:1 },
+  { prompt:"Être « en goumin » ça veut dire...",
+    options:["Être en retard","Être triste, avoir du chagrin","Être surexcité·e","Être perdu·e"], correct:1 },
+  { prompt:"« PNJ behavior » (ou « il/elle est en PNJ ») décrit quelqu'un qui...",
+    options:["Joue trop aux jeux vidéo","Agit de façon robotique, sans réagir, suit la foule sans réfléchir","Est très sociable","Donne des ordres"], correct:1 },
+  { prompt:"C'est quoi une « BDH » ?",
+    options:["Une personne fidèle en amitié","Quelqu'un jugé·e comme cherchant l'attention/l'approbation des hommes de façon excessive","Un très bon danseur","Une personne très populaire sur TikTok"], correct:1 },
+  { prompt:"Quel geste accompagne l'expression « clock it » 🤏 ?",
+    options:["Un high-five","Un pincement pouce-index, pour dire \u2018j'ai capté ce détail\u2019","Un check de poing","Un pouce levé"], correct:1 },
+  { prompt:"Une « bataille d'aura » c'est...",
+    options:["Une dispute violente entre amis","Un affrontement en rue à base de poses et mimiques virales, jugé par le public","Un concours de chant","Une compétition sportive officielle"], correct:1 },
+  { prompt:"Que veut dire 💀 quand quelqu'un l'envoie en réponse à un message ?",
+    options:["C'est dangereux, fais attention","« Je suis mort·e de rire »","C'est un sujet triste","C'est effrayant"], correct:1 },
+  { prompt:"« Slay » veut dire...",
+    options:["Rater complètement quelque chose","Réussir/exceller à quelque chose, être impressionnant·e","Être fatigué·e","Abandonner"], correct:1 },
+];
+const QUIZ_GENZ_TIERS = [
+  { max:2, emoji:'🧓', title:'Boomeuse certifiée', text:"Askip tu confonds encore Snap et Insta. Retourne voir tes petits-enfants pour un cours de rattrapage." },
+  { max:5, emoji:'📼', title:'Boomeuse en formation', text:"T'as capté deux-trois trucs, mais t'es encore loin d'avoir ta boulangerie bien organisée." },
+  { max:8, emoji:'🫡', title:'Presque validée par les ados', text:"Pas mal du tout ! Tu commences à clock les vrais codes. Encore un effort et tu peux te la raconter." },
+  { max:11, emoji:'💅', title:'Honorary Gen Z', text:"Sérieusement impressionnant. T'as plus le seum, t'as l'aura. Les ados peuvent rien te dire." },
+];
+function buildQuizGenz(){
+  const wrap = document.getElementById('quiz-genz-questions');
+  wrap.innerHTML = '';
+  QUIZ_GENZ_QUESTIONS.forEach((q, qi)=>{
+    const block = document.createElement('div');
+    block.className = 'modal-section';
+    block.dataset.qi = qi;
+    const optsHtml = q.options.map((opt, oi)=>`
+      <label class="quiz-genz-option">
+        <input type="radio" name="quiz-genz-q${qi}" value="${oi}">
+        <span>${opt}</span>
+      </label>`).join('');
+    block.innerHTML = `<div class="section-title">${qi+1}. ${q.prompt}</div><div class="quiz-genz-options">${optsHtml}</div>`;
+    wrap.appendChild(block);
+  });
+  document.getElementById('quiz-genz-result').style.display = 'none';
+  document.getElementById('quiz-genz-error').classList.remove('show');
+  wrap.style.display = '';
+  document.getElementById('quiz-genz-submit').style.display = '';
+}
+document.getElementById('open-quiz-genz').addEventListener('click', ()=>{
+  buildQuizGenz();
+  openModal('modal-quiz-genz');
+});
+document.getElementById('quiz-genz-close').addEventListener('click', ()=> closeModal('modal-quiz-genz'));
+document.getElementById('quiz-genz-submit').addEventListener('click', ()=>{
+  const wrap = document.getElementById('quiz-genz-questions');
+  const errorEl = document.getElementById('quiz-genz-error');
+  let score = 0;
+  for(let qi=0; qi<QUIZ_GENZ_QUESTIONS.length; qi++){
+    const checked = wrap.querySelector(`input[name="quiz-genz-q${qi}"]:checked`);
+    if(!checked){
+      errorEl.classList.add('show');
+      return;
+    }
+    if(parseInt(checked.value,10) === QUIZ_GENZ_QUESTIONS[qi].correct) score++;
+  }
+  errorEl.classList.remove('show');
+  const tier = QUIZ_GENZ_TIERS.find(t => score <= t.max);
+  document.getElementById('quiz-genz-result-emoji').textContent = tier.emoji;
+  document.getElementById('quiz-genz-result-title').textContent = tier.title;
+  document.getElementById('quiz-genz-result-text').textContent = tier.text;
+  document.getElementById('quiz-genz-result-score').textContent = `${score} / ${QUIZ_GENZ_QUESTIONS.length} bonnes réponses`;
+  wrap.style.display = 'none';
+  document.getElementById('quiz-genz-submit').style.display = 'none';
+  document.getElementById('quiz-genz-result').style.display = 'block';
+});
+document.getElementById('quiz-genz-retry').addEventListener('click', buildQuizGenz);
 
 /* ============ MA MINIPLAYLIST COMMANDO ============ */
 document.getElementById('open-playlist').addEventListener('click', ()=>{
