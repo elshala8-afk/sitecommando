@@ -231,7 +231,12 @@ function saveParticipantToCloud(){
     events: state.quizAnswers.events,
     month: currentMonthTag(),
     timestamp: firebase.firestore.FieldValue.serverTimestamp()
-  }).catch(err=> console.warn("Impossible d'enregistrer tes réponses dans Firebase :", err));
+  }).catch(err=>{
+    console.warn("Impossible d'enregistrer tes réponses dans Firebase :", err);
+    // Un échec silencieux ici est pire qu'une erreur visible : la personne
+    // croit avoir rejoint alors que rien n'est enregistré. On l'avertit.
+    alert(`Tes réponses n'ont pas pu être enregistrées. Réessaie, ou préviens l'administratrice si ça persiste. (détail : ${(err && (err.code || err.message)) || 'inconnu'})`);
+  });
 }
 function getAnswersFor(c, isYou){
   if(isYou){
@@ -314,7 +319,7 @@ function renderEmbed(link){
 }
 
 /* ---------- fonds immersifs : rotation en fondu, sans parallax ---------- */
-const BG_SEQUENCE = ['bg_12','bg_13','bg_0334','bg_22','bg_292','bg_400','bg_401','bg_402','bg_403','bg_404','bg_405','bg_406'];
+const BG_SEQUENCE = ['bg_12','bg_13','bg_0334','bg_292','bg_400','bg_401','bg_402','bg_403','bg_404','bg_405','bg_406'];
 function initBgCycle(containerId, offset, interval){
   const container = document.getElementById(containerId);
   if(!container) return;
@@ -1132,13 +1137,13 @@ let adminPanelFreshlyPopulated = false; // évite d'écraser une saisie en cours
 
 function applyCreaToModal(){
   const c = monthlyConfig.crea || DEFAULT_CREA;
-  document.getElementById('crea-title').textContent = c.title;
-  document.getElementById('crea-body1').textContent = c.body1;
-  document.getElementById('crea-body2').textContent = c.body2;
-  document.getElementById('crea-tools').textContent = c.tools;
-  document.getElementById('crea-consignes').textContent = c.consignes;
-  document.getElementById('crea-where').textContent = c.where;
-  document.getElementById('crea-when').textContent = c.when;
+  document.getElementById('crea-title').innerHTML = linkifyText(c.title);
+  document.getElementById('crea-body1').innerHTML = linkifyText(c.body1);
+  document.getElementById('crea-body2').innerHTML = linkifyText(c.body2);
+  document.getElementById('crea-tools').innerHTML = linkifyText(c.tools);
+  document.getElementById('crea-consignes').innerHTML = linkifyText(c.consignes);
+  document.getElementById('crea-where').innerHTML = linkifyText(c.where);
+  document.getElementById('crea-when').innerHTML = linkifyText(c.when);
 }
 document.getElementById('open-crea').addEventListener('click', ()=>{
   applyCreaToModal();
@@ -1178,7 +1183,7 @@ function refreshCreaJoinUI(){
     btn.classList.add('joined');
     btn.disabled = false;
   } else {
-    btn.textContent = 'Je participe au défi →';
+    btn.textContent = 'Je participe au Spice Créa →';
     btn.classList.remove('joined');
     btn.disabled = false;
   }
