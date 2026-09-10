@@ -897,6 +897,8 @@ function initDashboard(){
   if(badgeEl) badgeEl.textContent = connectionBadgeText();
   buildDashCharacterGrid();
   renderDashLeaderboard();
+  const cardTextEl = document.getElementById('crea-card-text');
+  if(cardTextEl) cardTextEl.textContent = (monthlyConfig.crea && monthlyConfig.crea.cardText) || DEFAULT_CREA.cardText;
 }
 
 /* ============ PERSONNAGES SUR L'ÉCRAN PRINCIPAL ============ */
@@ -1125,6 +1127,7 @@ document.getElementById('roulette-spin').addEventListener('click', ()=>{
 /* ============ LA CRÉA DU MOIS ============ */
 const DEFAULT_CREA = {
   title: 'Une journée de vacances avec moi',
+  cardText: 'Un vlog ou un album photo de ta journée type.',
   body1: "Et si, le temps d'une journée, tu devenais vlogueuse ? On a envie de vivre un peu de tes vacances à travers tes yeux : filme, raconte, montre-nous une journée avec toi — un petit vlog « Une journée de vacances avec moi » suffit amplement.",
   body2: "Plus discret·ète ? Un petit album photo « Summer Mood » nous comblera tout autant. L'essentiel, c'est de partager un fragment de ton été.",
   tools: "CapCut (ou l'appli de montage que tu préfères) — gratuite et simple.",
@@ -1144,6 +1147,8 @@ function applyCreaToModal(){
   document.getElementById('crea-consignes').innerHTML = linkifyText(c.consignes);
   document.getElementById('crea-where').innerHTML = linkifyText(c.where);
   document.getElementById('crea-when').innerHTML = linkifyText(c.when);
+  const cardTextEl = document.getElementById('crea-card-text');
+  if(cardTextEl) cardTextEl.textContent = c.cardText || DEFAULT_CREA.cardText;
 }
 document.getElementById('open-crea').addEventListener('click', ()=>{
   applyCreaToModal();
@@ -1633,6 +1638,7 @@ document.getElementById('admin-gate-submit').addEventListener('click', ()=>{
 function openAdminPanel(){
   const c = monthlyConfig.crea || DEFAULT_CREA;
   document.getElementById('admin-crea-title').value = c.title;
+  document.getElementById('admin-crea-cardtext').value = c.cardText || DEFAULT_CREA.cardText;
   document.getElementById('admin-crea-body1').value = c.body1;
   document.getElementById('admin-crea-body2').value = c.body2;
   document.getElementById('admin-crea-tools').value = c.tools;
@@ -1695,6 +1701,7 @@ document.getElementById('admin-close').addEventListener('click', ()=> closeModal
 document.getElementById('admin-save').addEventListener('click', ()=>{
   monthlyConfig.crea = {
     title: document.getElementById('admin-crea-title').value.trim() || DEFAULT_CREA.title,
+    cardText: document.getElementById('admin-crea-cardtext').value.trim() || DEFAULT_CREA.cardText,
     body1: document.getElementById('admin-crea-body1').value.trim() || DEFAULT_CREA.body1,
     body2: document.getElementById('admin-crea-body2').value.trim() || DEFAULT_CREA.body2,
     tools: document.getElementById('admin-crea-tools').value.trim() || DEFAULT_CREA.tools,
@@ -1733,6 +1740,8 @@ document.getElementById('admin-save').addEventListener('click', ()=>{
   refreshCharacterNameDisplays();
 
   if(typeof saveMonthlyConfigToCloud === 'function') saveMonthlyConfigToCloud();
+  const cardTextEl = document.getElementById('crea-card-text');
+  if(cardTextEl) cardTextEl.textContent = monthlyConfig.crea.cardText || DEFAULT_CREA.cardText;
   const confirmEl = document.getElementById('admin-save-confirm');
   confirmEl.classList.add('show');
   setTimeout(()=> confirmEl.classList.remove('show'), 2500);
