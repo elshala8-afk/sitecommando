@@ -240,6 +240,7 @@
   .rubrique-card .status-badge{ position:absolute; top:18px; right:18px; font-size:10px; font-weight:700; letter-spacing:.05em; text-transform:uppercase; background:rgba(255,255,255,.22); padding:5px 10px; border-radius:100px; }
   .card-fiches{ background-color:var(--terracotta); }
   .card-binome, .card-crea, .card-jouer, .card-lettre, .card-love, .card-playlist, .card-recs, .card-events{ background-color:var(--terracotta); }
+  .card-quiz{ background-color:var(--plum); }
 
   .content-card{ position:relative; z-index:2; margin:auto; background:var(--blush); border-radius:8px 26px 26px 8px; max-width:580px; width:100%; padding:44px 40px 36px; transform:scale(.94) translateY(16px); opacity:0; transition:transform .5s var(--ease), opacity .5s var(--ease); box-shadow:0 30px 60px rgba(0,0,0,.35); }
   .modal-overlay.active .content-card{ transform:scale(1) translateY(0); opacity:1; }
