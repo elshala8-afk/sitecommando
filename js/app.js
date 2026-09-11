@@ -95,6 +95,10 @@ let sharedParticipants = {};
 let cloudMessagesCache = [];
 
 function currentMonthTag(){
+  // Le "mois en cours" est décidé par l'admin (bouton "Passer au mois
+  // suivant"), pas automatiquement par la date du calendrier — pour que les
+  // réponses ne disparaissent jamais toutes seules le 1er du mois.
+  if(typeof monthlyConfig !== 'undefined' && monthlyConfig.activeMonth) return monthlyConfig.activeMonth;
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
 }
@@ -155,6 +159,7 @@ function watchMonthlyConfig(){
   return db.collection('config').doc(configDocId()).onSnapshot(doc=>{
     if(!doc.exists) return;
     const d = doc.data();
+    if(d.activeMonth) monthlyConfig.activeMonth = d.activeMonth;
     if(d.crea) monthlyConfig.crea = d.crea;
     if(d.lettreBody) monthlyConfig.lettreBody = d.lettreBody;
     if(d.lettreQuote) monthlyConfig.lettreQuote = d.lettreQuote;
@@ -202,6 +207,7 @@ function saveMonthlyConfigToCloud(){
   if(typeof firebaseReady === 'undefined' || !firebaseReady || !db || !currentRoomId) return;
   db.collection('config').doc(configDocId()).set({
     roomId: currentRoomId,
+    activeMonth: monthlyConfig.activeMonth || null,
     crea: monthlyConfig.crea,
     lettreBody: monthlyConfig.lettreBody,
     lettreQuote: monthlyConfig.lettreQuote,
@@ -214,7 +220,17 @@ function saveMonthlyConfigToCloud(){
   }, {merge:true}).catch(err=> console.warn("Impossible d'enregistrer la config dans Firebase :", err));
 }
 function saveParticipantToCloud(){
-  if(typeof firebaseReady === 'undefined' || !firebaseReady || !db || !state.selectedCharacter || !currentRoomId) return;
+  if(typeof firebaseReady === 'undefined' || !firebaseReady || !db){
+    console.warn('saveParticipantToCloud : Firebase pas prêt, rien enregistré (mode démo local).');
+    return;
+  }
+  if(!state.selectedCharacter || !currentRoomId){
+    // Ceci ne devrait jamais arriver en usage normal — si ça arrive, mieux
+    // vaut le savoir tout de suite que perdre silencieusement une réponse.
+    console.warn('saveParticipantToCloud : condition manquante', {selectedCharacter: state.selectedCharacter, currentRoomId});
+    alert(`Tes réponses n'ont pas pu être enregistrées (problème technique interne). Réessaie de te reconnecter depuis le début. (détail : ${!state.selectedCharacter ? 'personnage manquant' : 'salle manquante'})`);
+    return;
+  }
   db.collection('participants').add({
     roomId: currentRoomId,
     ownerId: getCurrentUid(),
@@ -1135,7 +1151,7 @@ const DEFAULT_CREA = {
   where: "Sur notre groupe 💛",
   when: "Quand vous voulez, avant la fin du mois."
 };
-let monthlyConfig = { crea: {...DEFAULT_CREA}, lettreBody: null, lettreQuote: null, lettreLinkText: null, lettreLinkUrl: null };
+let monthlyConfig = { activeMonth: null, crea: {...DEFAULT_CREA}, lettreBody: null, lettreQuote: null, lettreLinkText: null, lettreLinkUrl: null };
 let adminPanelFreshlyPopulated = false; // évite d'écraser une saisie en cours après le premier rafraîchissement
 
 function applyCreaToModal(){
@@ -1755,7 +1771,7 @@ document.getElementById('admin-archive-reset').addEventListener('click', async (
     note.textContent = "Cette fonction a besoin de Firebase — en mode démo locale, il n'y a rien à archiver (rien n'est partagé de toute façon).";
     return;
   }
-  if(!confirm("Passer au mois suivant ?\n\nCeci va :\n• archiver puis effacer toutes les réponses de ce mois-ci\n• vider la créa du mois et la lettre du mois (à réécrire pour le nouveau thème)\n\nRien n'est perdu — tout reste consultable dans Firebase, dans la collection \"archives\".\n\nCette action est immédiate et ne peut pas être annulée depuis l'app.")) return;
+  if(!confirm("Passer au mois suivant ?\n\nCeci va :\n• archiver puis effacer toutes les réponses de ce mois-ci\n• garder tel quel le contenu du Spice Créa et de la Pills du mois (à modifier vous-même dans les sections ci-dessus si besoin)\n\nRien n'est perdu — tout reste consultable dans Firebase, dans la collection \"archives\".\n\nCette action est immédiate et ne peut pas être annulée depuis l'app.")) return;
 
   const btn = document.getElementById('admin-archive-reset');
   btn.disabled = true;
@@ -1793,13 +1809,13 @@ document.getElementById('admin-archive-reset').addEventListener('click', async (
     challengeDocs.forEach(doc=> batch.delete(doc.ref));
     await batch.commit();
 
-    // Nouveau mois = nouveau thème : on vide la créa et la lettre pour que
-    // le mode admin les réécrive fraîches (au lieu de garder l'ancien contenu).
-    monthlyConfig.crea = {...DEFAULT_CREA};
-    monthlyConfig.lettreBody = '';
-    monthlyConfig.lettreQuote = '';
-    monthlyConfig.lettreLinkText = '';
-    monthlyConfig.lettreLinkUrl = '';
+    // Le Spice Créa et la Pills du mois restent tels quels — seules les
+    // réponses des participantes sont archivées. C'est vous qui décidez
+    // quand les modifier, via le mode admin, indépendamment de l'archivage.
+    // Le nouveau "mois actif" est la vraie date du jour, au moment précis où
+    // l'admin choisit de passer au mois suivant — jamais automatique.
+    const now = new Date();
+    monthlyConfig.activeMonth = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
     await saveMonthlyConfigToCloud();
 
     sharedParticipants = {};
