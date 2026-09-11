@@ -392,8 +392,8 @@
     .letter-card{ padding:32px 22px 28px; }
     .content-card{ padding:30px 20px 26px; }
     .quiz-page-wrap{ padding:28px 18px 22px; }
-    .character img{ width:104px; height:104px; }
-    .character img.char-large{ width:156px; height:156px; }
+    .character img{ width:230px; height:230px; }
+    .character img.char-large{ width:345px; height:345px; }
 
     /* Écran de sélection du personnage : défilement horizontal sur mobile,
        plus lisible qu'une grille qui s'entasse sur plusieurs lignes. */
@@ -467,8 +467,8 @@
   }
   @media (max-width:400px){
     .login-card h1{ font-size:22px; }
-    .character img{ width:88px; height:88px; }
-    .character img.char-large{ width:132px; height:132px; }
+    .character img{ width:195px; height:195px; }
+    .character img.char-large{ width:290px; height:290px; }
     .commando-title{ font-size:25px; }
   }
   @media (prefers-reduced-motion: reduce){
