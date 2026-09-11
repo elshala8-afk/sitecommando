@@ -2008,3 +2008,33 @@ document.addEventListener('keydown', (e)=>{
     document.querySelectorAll('.modal-overlay.active').forEach(m=>m.classList.remove('active'));
   }
 });
+
+/* ============ APP INSTALLABLE (PWA) ============ */
+if('serviceWorker' in navigator){
+  window.addEventListener('load', ()=>{
+    navigator.serviceWorker.register('sw.js').catch(err=>{
+      console.warn("Le service worker n'a pas pu s'installer (l'app reste utilisable normalement) :", err);
+    });
+  });
+}
+// Sur Android/Chrome, on peut proposer un vrai bouton d'installation.
+// Sur iPhone, Safari ne le permet pas techniquement — l'installation s'y
+// fait à la main via le menu Partager → "Sur l'écran d'accueil".
+let deferredInstallPrompt = null;
+window.addEventListener('beforeinstallprompt', (e)=>{
+  e.preventDefault();
+  deferredInstallPrompt = e;
+  const btn = document.getElementById('install-app-btn');
+  if(btn) btn.style.display = 'block';
+});
+document.getElementById('install-app-btn')?.addEventListener('click', async ()=>{
+  if(!deferredInstallPrompt) return;
+  deferredInstallPrompt.prompt();
+  await deferredInstallPrompt.userChoice;
+  deferredInstallPrompt = null;
+  document.getElementById('install-app-btn').style.display = 'none';
+});
+window.addEventListener('appinstalled', ()=>{
+  const btn = document.getElementById('install-app-btn');
+  if(btn) btn.style.display = 'none';
+});
