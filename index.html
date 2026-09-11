@@ -70,6 +70,7 @@
 <section class="scene" id="screen-select">
   <div class="scene-bg-cycle" id="bgcycle-select"><div class="bg-layer l1"></div><div class="bg-layer l2"></div></div>
   <div class="scene-veil"></div>
+  <button class="close-x" id="select-back" aria-label="Revenir à l'écran de connexion" style="position:absolute; top:24px; left:24px; z-index:5;">←</button>
   <div class="scene-content">
     <div class="select-wrap">
       <span class="eyebrow">Ton identité pour le mois</span>
@@ -171,6 +172,7 @@
           <h2>Salut <span id="dash-name"></span> 👋</h2>
           <div style="display:flex; gap:14px; margin-top:6px; flex-wrap:wrap;">
             <button type="button" id="edit-answers" class="admin-link" style="margin-top:0;">Modifier mes réponses</button>
+            <button type="button" id="switch-room" class="admin-link" style="margin-top:0;">Changer de salle</button>
           </div>
         </div>
       </div>
