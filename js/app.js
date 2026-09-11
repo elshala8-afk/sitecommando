@@ -590,6 +590,17 @@ document.getElementById('letter-continue').addEventListener('click', async ()=>{
   closeModal('modal-letter');
   goToScreen('screen-quiz');
 });
+document.getElementById('letter-close').addEventListener('click', ()=>{
+  closeModal('modal-letter');
+  document.getElementById('letter-participant-name').value = '';
+  document.getElementById('letter-participant-password').value = '';
+  document.getElementById('letter-error')?.classList.remove('show');
+  state.selectedCharacter = null;
+  document.querySelectorAll('#character-grid .character').forEach(el=>{
+    el.classList.remove('chosen','fade-out');
+  });
+  goToScreen('screen-select');
+});
 
 /* ============ SE CONNECTER (retrouver son espace depuis un autre appareil) ============ */
 function getCurrentUid(){
