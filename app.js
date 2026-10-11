@@ -67,7 +67,16 @@ const CHARACTERS = [
   {id:'275', name:'Éclat',          asset:'char_275', active:true},
   {id:'276', name:'Vague',          asset:'char_276', active:true},
   {id:'277', name:'Cocotte',        asset:'char_277', active:true},
-  {id:'278', name:'Tournesol',      asset:'char_278', active:true}
+  {id:'278', name:'Tournesol',      asset:'char_278', active:true},
+  {id:'279', name:'Rubane',         asset:'char_279', active:true},
+  {id:'280', name:'Arc-en-ciel',    asset:'char_280', active:true},
+  {id:'281', name:'Moustache',      asset:'char_281', active:true},
+  {id:'282', name:'Doudoune',       asset:'char_282', active:true},
+  {id:'283', name:'Ibiza',          asset:'char_283', active:true},
+  {id:'284', name:'Léopard',        asset:'char_284', active:true},
+  {id:'285', name:'Câlin',          asset:'char_285', active:true},
+  {id:'286', name:'Écharpe',        asset:'char_286', active:true},
+  {id:'287', name:'Bouboule',       asset:'char_287', active:true}
 ];
 
 const MOCK_ANSWERS = {
@@ -93,6 +102,13 @@ const messages = []; // notes d'amour envoyées pendant la session (repli local)
    ============================================================ */
 let sharedParticipants = {};
 let cloudMessagesCache = [];
+// Snapshots bruts (non filtrés par mois) mis en cache, pour pouvoir
+// réappliquer le filtre du mois dès que monthlyConfig.activeMonth arrive
+// de Firestore — sans attendre une nouvelle écriture sur la collection.
+// Voir reapplyMonthFilters() : corrige le bug "réponses disparues le 1er du mois".
+let lastParticipantsSnapshot = null;
+let lastMessagesSnapshot = null;
+let lastChallengeSnapshot = null;
 
 function currentMonthTag(){
   // Le "mois en cours" est décidé par l'admin (bouton "Passer au mois
@@ -128,28 +144,38 @@ function watchParticipants(){
   return db.collection('participants')
     .where('roomId','==', currentRoomId)
     .onSnapshot(snapshot=>{
-      const latest = {};
-      const monthTag = currentMonthTag();
-      snapshot.forEach(doc=>{
-        const d = doc.data();
-        if(d.month !== monthTag) return;
-        const prev = latest[d.characterId];
-        if(!prev || (d.timestamp && prev.timestamp && d.timestamp.toMillis() > prev.timestamp.toMillis())){
-          latest[d.characterId] = d;
-        }
-      });
-      sharedParticipants = latest;
-      refreshLiveViews();
+      lastParticipantsSnapshot = snapshot;
+      applyParticipantsFilter();
     }, err=>{ console.warn('Lecture Firestore (participants) impossible :', err); });
+}
+function applyParticipantsFilter(){
+  if(!lastParticipantsSnapshot) return;
+  const latest = {};
+  const monthTag = currentMonthTag();
+  lastParticipantsSnapshot.forEach(doc=>{
+    const d = doc.data();
+    if(d.month !== monthTag) return;
+    const prev = latest[d.characterId];
+    if(!prev || (d.timestamp && prev.timestamp && d.timestamp.toMillis() > prev.timestamp.toMillis())){
+      latest[d.characterId] = d;
+    }
+  });
+  sharedParticipants = latest;
+  refreshLiveViews();
 }
 function watchMessages(){
   if(typeof firebaseReady === 'undefined' || !firebaseReady || !db || !currentRoomId) return null;
   return db.collection('messages')
     .where('roomId','==', currentRoomId)
     .onSnapshot(snapshot=>{
-      const monthTag = currentMonthTag();
-      cloudMessagesCache = snapshot.docs.map(d=>d.data()).filter(d=> d.month === monthTag);
+      lastMessagesSnapshot = snapshot;
+      applyMessagesFilter();
     }, err=>{ console.warn('Lecture Firestore (messages) impossible :', err); });
+}
+function applyMessagesFilter(){
+  if(!lastMessagesSnapshot) return;
+  const monthTag = currentMonthTag();
+  cloudMessagesCache = lastMessagesSnapshot.docs.map(d=>d.data()).filter(d=> d.month === monthTag);
 }
 function configDocId(){
   return currentRoomId ? `${currentRoomId}_monthly` : 'monthly';
@@ -159,7 +185,14 @@ function watchMonthlyConfig(){
   return db.collection('config').doc(configDocId()).onSnapshot(doc=>{
     if(!doc.exists) return;
     const d = doc.data();
+    const previousActiveMonth = monthlyConfig.activeMonth;
     if(d.activeMonth) monthlyConfig.activeMonth = d.activeMonth;
+    // Le mois actif vient d'arriver (ou de changer) depuis Firestore : on
+    // réapplique tout de suite le filtre du mois sur les données déjà reçues,
+    // au lieu d'attendre une nouvelle écriture sur participants/messages/
+    // challengeParticipants qui pourrait ne jamais arriver avant la prochaine
+    // visite — c'est ce qui causait la disparition apparente des réponses.
+    if(d.activeMonth && d.activeMonth !== previousActiveMonth) reapplyMonthFilters();
     if(d.crea) monthlyConfig.crea = d.crea;
     if(d.lettreBody) monthlyConfig.lettreBody = d.lettreBody;
     if(d.lettreQuote) monthlyConfig.lettreQuote = d.lettreQuote;
@@ -360,7 +393,7 @@ function initBgCycle(containerId, offset, interval){
   ['bgcycle-login',0], ['bgcycle-select',1], ['bgcycle-letter',2], ['bgcycle-quiz',3],
   ['bgcycle-dashboard',4], ['bgcycle-fiches',0], ['bgcycle-fiche-detail',1], ['bgcycle-binome',2], ['bgcycle-recs',3],
   ['bgcycle-crea',3], ['bgcycle-jouer',4], ['bgcycle-lettre',0], ['bgcycle-love',1], ['bgcycle-playlist',2],
-  ['bgcycle-admin-gate',3], ['bgcycle-admin',4], ['bgcycle-quiz-genz',1]
+  ['bgcycle-admin-gate',3], ['bgcycle-admin',4]
 ].forEach(([id,offset],i)=>{
   if(id === 'bgcycle-login'){
     // Le fond de l'écran de connexion doit être visible tout de suite.
@@ -1222,16 +1255,31 @@ function watchChallengeParticipants(){
   return db.collection('challengeParticipants')
     .where('roomId','==', currentRoomId)
     .onSnapshot(snapshot=>{
-      const monthTag = currentMonthTag();
-      const map = {};
-      snapshot.forEach(doc=>{
-        const d = doc.data();
-        if(d.month !== monthTag) return;
-        map[d.ownerId] = { name: d.name, timestamp: d.timestamp, docId: doc.id };
-      });
-      challengeParticipants = map;
-      refreshCreaJoinUI();
+      lastChallengeSnapshot = snapshot;
+      applyChallengeFilter();
     }, err=>{ console.warn('Lecture Firestore (challengeParticipants) impossible :', err); });
+}
+function applyChallengeFilter(){
+  if(!lastChallengeSnapshot) return;
+  const monthTag = currentMonthTag();
+  const map = {};
+  lastChallengeSnapshot.forEach(doc=>{
+    const d = doc.data();
+    if(d.month !== monthTag) return;
+    map[d.ownerId] = { name: d.name, timestamp: d.timestamp, docId: doc.id };
+  });
+  challengeParticipants = map;
+  refreshCreaJoinUI();
+}
+// Réapplique le filtre du mois sur les 3 collections à partir des snapshots
+// bruts déjà en cache, sans attendre une nouvelle écriture Firestore.
+// Appelé dès que monthlyConfig.activeMonth arrive/change (watchMonthlyConfig),
+// pour éviter que les réponses "disparaissent" le temps que la config se
+// charge après les participants au premier chargement de la page.
+function reapplyMonthFilters(){
+  applyParticipantsFilter();
+  applyMessagesFilter();
+  applyChallengeFilter();
 }
 function refreshCreaJoinUI(){
   const btn = document.getElementById('crea-join-btn');
@@ -1933,86 +1981,6 @@ document.getElementById('love-send').addEventListener('click', ()=>{
   confirmEl.classList.add('show');
   setTimeout(()=> confirmEl.classList.remove('show'), 3000);
 });
-
-/* ============ LE QUIZ DE LA BOOMEUSE (vocabulaire Gen Z) ============ */
-const QUIZ_GENZ_QUESTIONS = [
-  { prompt:"« Avoir un pain » (ou « mon pain ») veut dire...",
-    options:["Avoir faim","Avoir un crush, quelqu'un qui nous attire","Être fauché·e","Être de mauvaise humeur"], correct:1 },
-  { prompt:"Dans ce contexte, « la boulangerie » désigne...",
-    options:["Le lycée","L'univers amoureux, l'endroit où on trouve son crush","Un groupe d'amis","Les réseaux sociaux"], correct:1 },
-  { prompt:"Un « pain brioché » c'est...",
-    options:["Un ami proche","Un coup de foudre, un crush particulièrement intense","Quelqu'un de riche","Une personne ennuyeuse"], correct:1 },
-  { prompt:"Un « pain rassis » c'est...",
-    options:["Un ex","Quelqu'un qui ne nous attire pas du tout","Une vieille photo","Un compliment raté"], correct:1 },
-  { prompt:"Être « en goumin » ça veut dire...",
-    options:["Être en retard","Être triste, avoir du chagrin","Être surexcité·e","Être perdu·e"], correct:1 },
-  { prompt:"« PNJ behavior » (ou « il/elle est en PNJ ») décrit quelqu'un qui...",
-    options:["Joue trop aux jeux vidéo","Agit de façon robotique, sans réagir, suit la foule sans réfléchir","Est très sociable","Donne des ordres"], correct:1 },
-  { prompt:"C'est quoi une « BDH » ?",
-    options:["Une personne fidèle en amitié","Quelqu'un jugé·e comme cherchant l'attention/l'approbation des hommes de façon excessive","Un très bon danseur","Une personne très populaire sur TikTok"], correct:1 },
-  { prompt:"Quel geste accompagne l'expression « clock it » 🤏 ?",
-    options:["Un high-five","Un pincement pouce-index, pour dire \u2018j'ai capté ce détail\u2019","Un check de poing","Un pouce levé"], correct:1 },
-  { prompt:"Une « bataille d'aura » c'est...",
-    options:["Une dispute violente entre amis","Un affrontement en rue à base de poses et mimiques virales, jugé par le public","Un concours de chant","Une compétition sportive officielle"], correct:1 },
-  { prompt:"Que veut dire 💀 quand quelqu'un l'envoie en réponse à un message ?",
-    options:["C'est dangereux, fais attention","« Je suis mort·e de rire »","C'est un sujet triste","C'est effrayant"], correct:1 },
-  { prompt:"« Slay » veut dire...",
-    options:["Rater complètement quelque chose","Réussir/exceller à quelque chose, être impressionnant·e","Être fatigué·e","Abandonner"], correct:1 },
-];
-const QUIZ_GENZ_TIERS = [
-  { max:2, emoji:'🧓', title:'Boomeuse certifiée', text:"Askip tu confonds encore Snap et Insta. Retourne voir tes petits-enfants pour un cours de rattrapage." },
-  { max:5, emoji:'📼', title:'Boomeuse en formation', text:"T'as capté deux-trois trucs, mais t'es encore loin d'avoir ta boulangerie bien organisée." },
-  { max:8, emoji:'🫡', title:'Presque validée par les ados', text:"Pas mal du tout ! Tu commences à clock les vrais codes. Encore un effort et tu peux te la raconter." },
-  { max:11, emoji:'💅', title:'Honorary Gen Z', text:"Sérieusement impressionnant. T'as plus le seum, t'as l'aura. Les ados peuvent rien te dire." },
-];
-function buildQuizGenz(){
-  const wrap = document.getElementById('quiz-genz-questions');
-  wrap.innerHTML = '';
-  QUIZ_GENZ_QUESTIONS.forEach((q, qi)=>{
-    const block = document.createElement('div');
-    block.className = 'modal-section';
-    block.dataset.qi = qi;
-    const optsHtml = q.options.map((opt, oi)=>`
-      <label class="quiz-genz-option">
-        <input type="radio" name="quiz-genz-q${qi}" value="${oi}">
-        <span>${opt}</span>
-      </label>`).join('');
-    block.innerHTML = `<div class="section-title">${qi+1}. ${q.prompt}</div><div class="quiz-genz-options">${optsHtml}</div>`;
-    wrap.appendChild(block);
-  });
-  document.getElementById('quiz-genz-result').style.display = 'none';
-  document.getElementById('quiz-genz-error').classList.remove('show');
-  wrap.style.display = '';
-  document.getElementById('quiz-genz-submit').style.display = '';
-}
-document.getElementById('open-quiz-genz').addEventListener('click', ()=>{
-  buildQuizGenz();
-  openModal('modal-quiz-genz');
-});
-document.getElementById('quiz-genz-close').addEventListener('click', ()=> closeModal('modal-quiz-genz'));
-document.getElementById('quiz-genz-submit').addEventListener('click', ()=>{
-  const wrap = document.getElementById('quiz-genz-questions');
-  const errorEl = document.getElementById('quiz-genz-error');
-  let score = 0;
-  for(let qi=0; qi<QUIZ_GENZ_QUESTIONS.length; qi++){
-    const checked = wrap.querySelector(`input[name="quiz-genz-q${qi}"]:checked`);
-    if(!checked){
-      errorEl.classList.add('show');
-      return;
-    }
-    if(parseInt(checked.value,10) === QUIZ_GENZ_QUESTIONS[qi].correct) score++;
-  }
-  errorEl.classList.remove('show');
-  const tier = QUIZ_GENZ_TIERS.find(t => score <= t.max);
-  document.getElementById('quiz-genz-result-emoji').textContent = tier.emoji;
-  document.getElementById('quiz-genz-result-title').textContent = tier.title;
-  document.getElementById('quiz-genz-result-text').textContent = tier.text;
-  document.getElementById('quiz-genz-result-score').textContent = `${score} / ${QUIZ_GENZ_QUESTIONS.length} bonnes réponses`;
-  wrap.style.display = 'none';
-  document.getElementById('quiz-genz-submit').style.display = 'none';
-  document.getElementById('quiz-genz-result').style.display = 'block';
-});
-document.getElementById('quiz-genz-retry').addEventListener('click', buildQuizGenz);
 
 /* ============ MA MINIPLAYLIST COMMANDO ============ */
 document.getElementById('open-playlist').addEventListener('click', ()=>{
