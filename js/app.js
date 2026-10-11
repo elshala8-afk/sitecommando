@@ -109,6 +109,9 @@ let cloudMessagesCache = [];
 let lastParticipantsSnapshot = null;
 let lastMessagesSnapshot = null;
 let lastChallengeSnapshot = null;
+let lastCharlotteSnapshot = null;
+// Réponses à "la question de Charlotte", une par personne (clé = ownerId).
+let charlotteAnswers = {};
 
 function currentMonthTag(){
   // Le "mois en cours" est décidé par l'admin (bouton "Passer au mois
@@ -122,7 +125,7 @@ function assetForCharacterId(id){
   const c = CHARACTERS.find(ch=>ch.id===id);
   return c ? c.asset : 'char_258';
 }
-let participantsUnsub = null, messagesUnsub = null, configUnsub = null, challengeUnsub = null;
+let participantsUnsub = null, messagesUnsub = null, configUnsub = null, challengeUnsub = null, charlotteUnsub = null;
 function attachRoomListeners(){
   if(typeof firebaseReady === 'undefined' || !firebaseReady || !db || !currentRoomId) return;
   // On coupe d'éventuels écouteurs d'une salle précédente (changement de salle
@@ -131,10 +134,12 @@ function attachRoomListeners(){
   if(messagesUnsub) messagesUnsub();
   if(configUnsub) configUnsub();
   if(challengeUnsub) challengeUnsub();
+  if(charlotteUnsub) charlotteUnsub();
   participantsUnsub = watchParticipants();
   messagesUnsub = watchMessages();
   configUnsub = watchMonthlyConfig();
   challengeUnsub = watchChallengeParticipants();
+  charlotteUnsub = watchCharlotteAnswers();
 }
 function watchParticipants(){
   if(typeof firebaseReady === 'undefined' || !firebaseReady || !db || !currentRoomId) return null;
@@ -393,6 +398,7 @@ function initBgCycle(containerId, offset, interval){
   ['bgcycle-login',0], ['bgcycle-select',1], ['bgcycle-letter',2], ['bgcycle-quiz',3],
   ['bgcycle-dashboard',4], ['bgcycle-fiches',0], ['bgcycle-fiche-detail',1], ['bgcycle-binome',2], ['bgcycle-recs',3],
   ['bgcycle-crea',3], ['bgcycle-jouer',4], ['bgcycle-lettre',0], ['bgcycle-love',1], ['bgcycle-playlist',2],
+  ['bgcycle-charlotte',0],
   ['bgcycle-admin-gate',3], ['bgcycle-admin',4]
 ].forEach(([id,offset],i)=>{
   if(id === 'bgcycle-login'){
@@ -1271,7 +1277,28 @@ function applyChallengeFilter(){
   challengeParticipants = map;
   refreshCreaJoinUI();
 }
-// Réapplique le filtre du mois sur les 3 collections à partir des snapshots
+function watchCharlotteAnswers(){
+  if(typeof firebaseReady === 'undefined' || !firebaseReady || !db || !currentRoomId) return null;
+  return db.collection('charlotteAnswers')
+    .where('roomId','==', currentRoomId)
+    .onSnapshot(snapshot=>{
+      lastCharlotteSnapshot = snapshot;
+      applyCharlotteFilter();
+    }, err=>{ console.warn('Lecture Firestore (charlotteAnswers) impossible :', err); });
+}
+function applyCharlotteFilter(){
+  if(!lastCharlotteSnapshot) return;
+  const monthTag = currentMonthTag();
+  const map = {};
+  lastCharlotteSnapshot.forEach(doc=>{
+    const d = doc.data();
+    if(d.month !== monthTag) return;
+    map[d.ownerId] = { name: d.name, characterId: d.characterId, text: d.text, timestamp: d.timestamp, docId: doc.id };
+  });
+  charlotteAnswers = map;
+  renderCharlotteAnswers();
+}
+// Réapplique le filtre du mois sur les collections à partir des snapshots
 // bruts déjà en cache, sans attendre une nouvelle écriture Firestore.
 // Appelé dès que monthlyConfig.activeMonth arrive/change (watchMonthlyConfig),
 // pour éviter que les réponses "disparaissent" le temps que la config se
@@ -1280,6 +1307,7 @@ function reapplyMonthFilters(){
   applyParticipantsFilter();
   applyMessagesFilter();
   applyChallengeFilter();
+  applyCharlotteFilter();
 }
 function refreshCreaJoinUI(){
   const btn = document.getElementById('crea-join-btn');
@@ -1868,17 +1896,20 @@ document.getElementById('admin-archive-reset').addEventListener('click', async (
   note.textContent = 'Archivage en cours…';
   try{
     const monthTag = currentMonthTag();
-    const [participantsAllSnap, messagesAllSnap, challengeAllSnap] = await Promise.all([
+    const [participantsAllSnap, messagesAllSnap, challengeAllSnap, charlotteAllSnap] = await Promise.all([
       db.collection('participants').where('roomId','==', currentRoomId).get(),
       db.collection('messages').where('roomId','==', currentRoomId).get(),
-      db.collection('challengeParticipants').where('roomId','==', currentRoomId).get()
+      db.collection('challengeParticipants').where('roomId','==', currentRoomId).get(),
+      db.collection('charlotteAnswers').where('roomId','==', currentRoomId).get()
     ]);
     const participantsDocs = participantsAllSnap.docs.filter(d=> d.data().month === monthTag);
     const messagesDocs = messagesAllSnap.docs.filter(d=> d.data().month === monthTag);
     const challengeDocs = challengeAllSnap.docs.filter(d=> d.data().month === monthTag);
+    const charlotteDocs = charlotteAllSnap.docs.filter(d=> d.data().month === monthTag);
     const participantsData = participantsDocs.map(d=> d.data());
     const messagesData = messagesDocs.map(d=> d.data());
     const challengeData = challengeDocs.map(d=> d.data());
+    const charlotteData = charlotteDocs.map(d=> d.data());
 
     await db.collection('archives').doc(`${currentRoomId}_${monthTag}_${Date.now()}`).set({
       roomId: currentRoomId,
@@ -1886,6 +1917,7 @@ document.getElementById('admin-archive-reset').addEventListener('click', async (
       participants: participantsData,
       messages: messagesData,
       challengeParticipants: challengeData,
+      charlotteAnswers: charlotteData,
       crea: monthlyConfig.crea || null,
       lettreBody: monthlyConfig.lettreBody || null,
       lettreQuote: monthlyConfig.lettreQuote || null,
@@ -1897,6 +1929,7 @@ document.getElementById('admin-archive-reset').addEventListener('click', async (
     participantsDocs.forEach(doc=> batch.delete(doc.ref));
     messagesDocs.forEach(doc=> batch.delete(doc.ref));
     challengeDocs.forEach(doc=> batch.delete(doc.ref));
+    charlotteDocs.forEach(doc=> batch.delete(doc.ref));
     await batch.commit();
 
     // Le Spice Créa et la Pills du mois restent tels quels — seules les
@@ -1911,8 +1944,10 @@ document.getElementById('admin-archive-reset').addEventListener('click', async (
     sharedParticipants = {};
     cloudMessagesCache = [];
     challengeParticipants = {};
+    charlotteAnswers = {};
     refreshLiveViews();
     refreshCreaJoinUI();
+    if(document.getElementById('modal-charlotte')?.classList.contains('active')) renderCharlotteAnswers();
     if(document.getElementById('modal-admin').classList.contains('active')) openAdminPanel();
 
     const confirmEl = document.getElementById('admin-archive-confirm');
@@ -1980,6 +2015,110 @@ document.getElementById('love-send').addEventListener('click', ()=>{
   const confirmEl = document.getElementById('love-send-confirm');
   confirmEl.classList.add('show');
   setTimeout(()=> confirmEl.classList.remove('show'), 3000);
+});
+
+/* ============ LA QUESTION DE CHARLOTTE ============ */
+// Une réponse par personne et par mois (clé = ownerId). Contrairement aux
+// autres rubriques, elle peut être modifiée après coup (pas seulement créée
+// ou supprimée) — voir les règles Firestore, collection "charlotteAnswers".
+function charlotteDocId(uid){
+  return `${currentRoomId}_${uid}`;
+}
+document.getElementById('open-charlotte').addEventListener('click', ()=>{
+  renderCharlotteAnswers();
+  openModal('modal-charlotte');
+});
+document.getElementById('charlotte-close').addEventListener('click', ()=> closeModal('modal-charlotte'));
+function renderCharlotteAnswers(){
+  const uid = getCurrentUid();
+  const mine = uid && charlotteAnswers[uid];
+  const textEl = document.getElementById('charlotte-text');
+  const saveBtn = document.getElementById('charlotte-save');
+  const deleteBtn = document.getElementById('charlotte-delete');
+  // On ne réécrase pas ce que la personne est en train de taper si la liste
+  // se rafraîchit pendant qu'elle rédige (ex. quelqu'un d'autre répond en
+  // même temps) — seulement au tout premier affichage du formulaire.
+  if(textEl && document.activeElement !== textEl){
+    textEl.value = mine ? mine.text : '';
+  }
+  if(saveBtn) saveBtn.textContent = mine ? 'Mettre à jour ma réponse →' : 'Partager ma réponse →';
+  if(deleteBtn) deleteBtn.style.display = mine ? '' : 'none';
+
+  const wrap = document.getElementById('charlotte-list');
+  const emptyEl = document.getElementById('charlotte-empty');
+  if(!wrap) return;
+  wrap.innerHTML = '';
+  const entries = Object.entries(charlotteAnswers);
+  emptyEl.style.display = entries.length === 0 ? '' : 'none';
+  entries
+    .sort((a,b)=>{
+      const ta = a[1].timestamp ? a[1].timestamp.toMillis() : 0;
+      const tb = b[1].timestamp ? b[1].timestamp.toMillis() : 0;
+      return tb - ta; // plus récentes d'abord
+    })
+    .forEach(([ownerId, a])=>{
+      const item = document.createElement('div');
+      item.className = 'playlist-item' + (ownerId === uid ? ' charlotte-mine' : '');
+      item.innerHTML = `
+        <div class="playlist-item-head">
+          <img class="avatar" src="${ASSETS[assetForCharacterId(a.characterId)]}" alt="">
+          <span class="p-name">${escapeHtml(a.name)}${ownerId === uid ? ' (toi)' : ''}</span>
+        </div>
+        <div class="p-song-text">${escapeHtml(a.text)}</div>
+      `;
+      wrap.appendChild(item);
+    });
+}
+document.getElementById('charlotte-save').addEventListener('click', async ()=>{
+  const errorEl = document.getElementById('charlotte-error');
+  const confirmEl = document.getElementById('charlotte-save-confirm');
+  const text = document.getElementById('charlotte-text').value.trim();
+  errorEl.classList.remove('show');
+  if(!text){
+    errorEl.classList.add('show');
+    return;
+  }
+  const uid = getCurrentUid();
+  if(typeof firebaseReady === 'undefined' || !firebaseReady || !db || !currentRoomId || !uid){
+    alert("Il faut être connecté·e pour répondre — rejoins d'abord ta communauté depuis l'écran de connexion.");
+    return;
+  }
+  const btn = document.getElementById('charlotte-save');
+  btn.disabled = true;
+  try{
+    const name = state.participantName || 'Quelqu’un';
+    const characterId = state.selectedCharacter ? state.selectedCharacter.id : null;
+    await db.collection('charlotteAnswers').doc(charlotteDocId(uid)).set({
+      roomId: currentRoomId,
+      ownerId: uid,
+      name,
+      characterId,
+      text,
+      month: currentMonthTag(),
+      timestamp: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    confirmEl.classList.add('show');
+    setTimeout(()=> confirmEl.classList.remove('show'), 3000);
+  }catch(err){
+    console.warn("Impossible d'enregistrer ta réponse :", err);
+    alert(`Ta réponse n'a pas pu être enregistrée. Réessaie, ou préviens l'administratrice si ça persiste. (détail : ${(err && (err.code || err.message)) || 'inconnu'})`);
+  }
+  btn.disabled = false;
+});
+document.getElementById('charlotte-delete').addEventListener('click', async ()=>{
+  const uid = getCurrentUid();
+  if(typeof firebaseReady === 'undefined' || !firebaseReady || !db || !currentRoomId || !uid) return;
+  if(!confirm('Supprimer ta réponse à la question de Charlotte ?')) return;
+  const btn = document.getElementById('charlotte-delete');
+  btn.disabled = true;
+  try{
+    await db.collection('charlotteAnswers').doc(charlotteDocId(uid)).delete();
+    document.getElementById('charlotte-text').value = '';
+  }catch(err){
+    console.warn("Impossible de supprimer ta réponse :", err);
+    alert(`La suppression a échoué, réessaie dans un instant. (détail : ${(err && (err.code || err.message)) || 'inconnu'})`);
+  }
+  btn.disabled = false;
 });
 
 /* ============ MA MINIPLAYLIST COMMANDO ============ */
